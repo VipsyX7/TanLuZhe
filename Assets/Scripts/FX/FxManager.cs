@@ -27,6 +27,10 @@ namespace TanLuZhe
         [SerializeField] private Sprite _sparkSprite;
         [SerializeField] private Sprite _dustSprite;
         [SerializeField] private Sprite _slashSprite;
+        [Tooltip("Extra rotation applied to the slash arc. The art is drawn as a '(' opening toward +X, " +
+                 "so 180 deg makes the arc bulge along the attack direction with its hollow facing the " +
+                 "attacker - which is how a slash trail should read.")]
+        [Range(-180f, 180f)] [SerializeField] private float _slashAngleOffset = 180f;
         [SerializeField] private int _poolSize = 160;
         [SerializeField] private string _sortingLayerName = "Default";
 
@@ -175,15 +179,16 @@ namespace TanLuZhe
         }
 
         /// <summary>One-shot slash arc, rotated to match an attack direction.</summary>
-        public static void Slash(Vector2 position, Vector2 direction, float size = 1.6f, float life = 0.14f)
+        public static Transform Slash(Vector2 position, Vector2 direction, float size = 1.6f, float life = 0.14f)
         {
             FxManager fx = Instance;
-            if (fx == null) return;
+            if (fx == null) return null;
 
-            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + fx._slashAngleOffset;
             Particle p = fx.Emit(fx._slashSprite, position, Vector2.zero, life, size,
                 new Color(0.8f, 0.95f, 1f, 0.9f), 0f, 0f, 0f);
             if (p.Transform != null) p.Transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            return p.Transform;
         }
 
         /// <summary>Deterministic seeding for tests.</summary>

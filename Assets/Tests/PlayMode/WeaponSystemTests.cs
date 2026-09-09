@@ -190,6 +190,34 @@ namespace TanLuZhe.Tests
             return enemy;
         }
 
+        [UnityTest]
+        public IEnumerator MeleeAttack_SlashFxBulgesAlongTheSwing()
+        {
+            GameObject services = new GameObject("Services");
+            services.SetActive(false);
+            services.transform.SetParent(_root.transform, false);
+            FxManager fx = services.AddComponent<FxManager>();
+            SetField(fx, "_poolSize", 8);
+            services.SetActive(true);
+            yield return null;
+
+            // The slash art is a '(' opening toward +X, so the offset must turn it into a ')'
+            // that bulges in the attack direction with the hollow facing the attacker.
+            Transform right = FxManager.Slash(Vector2.zero, Vector2.right);
+            Assert.IsNotNull(right, "The slash FX should spawn a particle.");
+            Assert.That(Mathf.DeltaAngle(right.eulerAngles.z, 180f), Is.EqualTo(0f).Within(0.1f),
+                "A rightward swing must rotate the arc 180 deg so it opens toward the player.");
+
+            Transform up = FxManager.Slash(Vector2.zero, Vector2.up);
+            Assert.IsNotNull(up);
+            Assert.That(Mathf.DeltaAngle(up.eulerAngles.z, 270f), Is.EqualTo(0f).Within(0.1f),
+                "The offset must follow the attack direction, not be a fixed world angle.");
+
+            Transform left = FxManager.Slash(Vector2.zero, Vector2.left);
+            Assert.IsNotNull(left);
+            Assert.That(Mathf.DeltaAngle(left.eulerAngles.z, 0f), Is.EqualTo(0f).Within(0.1f));
+        }
+
         // ================================================================ pick up
         [UnityTest]
         public IEnumerator PickUp_F_AddsWeaponToBackpack()

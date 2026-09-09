@@ -290,6 +290,7 @@ namespace TanLuZhe.EditorTools
             SetField(fx, "_sparkSprite", S("spark"));
             SetField(fx, "_dustSprite", S("dust"));
             SetField(fx, "_slashSprite", S("slash"));
+            SetField(fx, "_slashAngleOffset", 180f);
             SetField(fx, "_poolSize", 220);
 
             // ---- parallax background
