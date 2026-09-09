@@ -405,9 +405,10 @@ namespace TanLuZhe.EditorTools
             SetField(grapple, "_maxRange", 16f);
             SetField(grapple, "_hookSpeed", 48f);
             SetField(grapple, "_retractSpeed", 70f);
-            SetField(grapple, "_maxReelSpeed", 8.5f);
-            SetField(grapple, "_reelAcceleration", 30f);
-            SetField(grapple, "_minRopeLength", 0.8f);
+            SetField(grapple, "_pullAcceleration", 140f);
+            SetField(grapple, "_maxPullSpeed", 30f);
+            SetField(grapple, "_releaseDistance", 1f);
+            SetField(grapple, "_contactReleaseDistance", 0.08f);
             SetField(grapple, "_ropeGrip", 1f);
             SetField(grapple, "_positionCorrection", 9f);
             SetField(grapple, "_attachDamage", 16f);

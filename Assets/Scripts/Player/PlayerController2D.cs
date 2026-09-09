@@ -380,6 +380,11 @@ namespace TanLuZhe
         // ------------------------------------------------------------------ motion
         private void ApplyHorizontalMovement(float inputX, float dt)
         {
+            // While the rope is pulling and the player is not asking for anything, the rope owns
+            // the horizontal motion. Without this the controller's own braking (95 m/s^2 on the
+            // ground) would cancel a 140 m/s^2 pull and a grounded grapple would go nowhere.
+            if (IsBeingPulled && Mathf.Abs(inputX) < 0.01f) return;
+
             float vx = _rb.linearVelocity.x;
             float target = inputX * _maxRunSpeed;
 
@@ -416,7 +421,7 @@ namespace TanLuZhe
 
             float deltaV = Mathf.Clamp(target - vx, -accel * dt, accel * dt);
 
-            Vector2 force = new Vector2(deltaV, 0f) * _rb.mass / dt;
+            Vector2 delta = new Vector2(deltaV, 0f);
 
             // On a slope, redirect the drive along the surface so running uphill keeps speed.
             if (_isGrounded && Mathf.Abs(_groundNormal.y) > 0.01f)
@@ -424,11 +429,14 @@ namespace TanLuZhe
                 Vector2 tangent = new Vector2(_groundNormal.y, -_groundNormal.x).normalized;
                 if (Mathf.Sign(tangent.x) != Mathf.Sign(_rb.linearVelocity.x) && Mathf.Abs(_rb.linearVelocity.x) > 0.1f)
                     tangent = -tangent;
-                Vector2 along = Vector2.Dot(force, tangent) * tangent;
-                force = Vector2.Lerp(force, along, 0.75f);
+                Vector2 along = Vector2.Dot(delta, tangent) * tangent;
+                delta = Vector2.Lerp(delta, along, 0.75f);
             }
 
-            _rb.AddForce(force, ForceMode2D.Force);
+            // Applied as a velocity delta, not as a force: a ForceMode2D.Force would be integrated
+            // by the physics step AFTER this component runs, which makes every clamp in this
+            // controller overshoot by one step of gravity.
+            _rb.linearVelocity += delta;
 
             // The player capsule uses a frictionless physics material (so wall slides and rope
             // swings are not damped), which means slopes need an explicit grip force to stop
@@ -441,7 +449,7 @@ namespace TanLuZhe
                     Vector2 tangent = new Vector2(_groundNormal.y, -_groundNormal.x).normalized;
                     Vector2 gravityAccel = Vector2.down * CurrentGravity;
                     float tangential = Vector2.Dot(gravityAccel, tangent);
-                    _rb.AddForce(-tangent * (tangential * _rb.mass), ForceMode2D.Force);
+                    _rb.linearVelocity += -tangent * (tangential * dt);
                 }
             }
 
@@ -482,7 +490,7 @@ namespace TanLuZhe
             }
 
             _appliedGravity = gravity;
-            _rb.AddForce(Vector2.down * (gravity * _rb.mass), ForceMode2D.Force);
+            _rb.linearVelocity += Vector2.down * (gravity * dt);
 
             if (_jumpCutRequested)
             {
@@ -501,7 +509,7 @@ namespace TanLuZhe
         {
             if (!_isGrounded) return;
             if (_rb.linearVelocity.y > 0.1f) return;
-            _rb.AddForce(Vector2.down * (_groundStickForce * _rb.mass), ForceMode2D.Force);
+            _rb.linearVelocity += Vector2.down * (_groundStickForce * dt);
         }
 
         private void ClampFallSpeed()

@@ -88,7 +88,7 @@ namespace TanLuZhe
 
             if (_grapple.State == GrappleState.Attached)
             {
-                _grappleText.text = $"HOOK {state}   rope {_grapple.RopeLength:0.00} m   winch {_grapple.CurrentReelSpeed:0.0} m/s";
+                _grappleText.text = $"HOOK {state}   rope {_grapple.RopeLength:0.00} m   pull {_grapple.CurrentPullSpeed:0.0} m/s";
             }
             else
             {

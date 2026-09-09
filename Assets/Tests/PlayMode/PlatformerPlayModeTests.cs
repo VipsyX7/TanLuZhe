@@ -18,6 +18,7 @@ namespace TanLuZhe.Tests
 
         private GameObject _root;
         private ScriptedInputSource _input;
+        private static PhysicsMaterial2D _frictionless;
 
         // ---------------------------------------------------------------- harness
         private sealed class ScriptedInputSource : IInputSource
@@ -60,7 +61,16 @@ namespace TanLuZhe.Tests
             go.transform.position = center;
             BoxCollider2D collider = go.AddComponent<BoxCollider2D>();
             collider.size = size;
+            collider.sharedMaterial = Frictionless();
             return go;
+        }
+
+        /// <summary>The game uses frictionless physics materials; mirror that so tests measure the rope, not friction.</summary>
+        private static PhysicsMaterial2D Frictionless()
+        {
+            if (_frictionless == null)
+                _frictionless = new PhysicsMaterial2D("TestFrictionless") { friction = 0f, bounciness = 0f };
+            return _frictionless;
         }
 
         private struct Rig
@@ -91,6 +101,7 @@ namespace TanLuZhe.Tests
             rig.Collider.direction = CapsuleDirection2D.Vertical;
             rig.Collider.size = new Vector2(0.72f, 1.5f);
             rig.Collider.offset = new Vector2(0f, 0.05f);
+            rig.Collider.sharedMaterial = Frictionless();
 
             rig.Controller = go.AddComponent<PlayerController2D>();
             rig.Controller.SetInputSource(_input);
@@ -122,6 +133,7 @@ namespace TanLuZhe.Tests
 
             BoxCollider2D collider = go.AddComponent<BoxCollider2D>();
             collider.size = new Vector2(0.9f, 0.8f);
+            collider.sharedMaterial = Frictionless();
 
             EnemyController2D enemy = go.AddComponent<EnemyController2D>();
             enemy.enabled = false; // test the physics, not the AI
@@ -199,10 +211,10 @@ namespace TanLuZhe.Tests
         {
             MakeBox("Ground", new Vector2(0f, -0.5f), new Vector2(40f, 1f), GameLayers.Ground);
             MakeBox("Wall", new Vector2(0.9f, 5f), new Vector2(1f, 12f), GameLayers.Ground);
-            Rig player = MakePlayer(new Vector2(0.2f, 6f));
+            Rig player = MakePlayer(new Vector2(0.02f, 8f));
 
             _input.Horizontal = 1f;
-            yield return StepFixed(60);
+            yield return StepFixed(30);
 
             Assert.IsTrue(player.Controller.IsWallSliding, "Holding into a wall while falling should trigger a wall slide.");
             Assert.That(player.Body.linearVelocity.y, Is.GreaterThan(-4.9f),
@@ -220,7 +232,7 @@ namespace TanLuZhe.Tests
             yield return StepFixed(30);
 
             Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 4f)), "Hook should launch.");
-            yield return StepFixed(20);
+            yield return StepFixed(12);
 
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "Hook should latch onto the wall.");
             Assert.AreEqual(GrappleAnchorType.Wall, player.Grapple.AnchorType);
@@ -229,14 +241,23 @@ namespace TanLuZhe.Tests
             float distanceBefore = Vector2.Distance(player.Body.position, anchor);
             float xBefore = player.Body.position.x;
 
-            yield return StepFixed(70);
+            yield return StepFixed(4);
 
-            float distanceAfter = Vector2.Distance(player.Body.position, anchor);
-            Assert.That(distanceAfter, Is.LessThan(distanceBefore - 1f),
-                "The winch must pull the player toward the hook's landing point.");
-            Assert.That(player.Body.position.x, Is.GreaterThan(xBefore + 1f), "The player must travel toward the wall.");
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "The pull should still be running.");
             Assert.IsTrue(player.Controller.IsBeingPulled, "The player should be flagged as being pulled.");
-            Assert.IsTrue(player.Grapple.IsRopeTaut, "The rope should be taut while winching.");
+            Assert.That(Vector2.Distance(player.Body.position, anchor), Is.LessThan(distanceBefore - 0.3f),
+                "The continuous pull must drag the player toward the hook's landing point.");
+            Assert.That(player.Body.position.x, Is.GreaterThan(xBefore + 0.15f), "The player must travel toward the wall.");
+
+            // keep flying in until the player arrives; the hook must let go by itself.
+            int guard = 0;
+            while (player.Grapple.State == GrappleState.Attached && guard++ < 150)
+                yield return new WaitForFixedUpdate();
+
+            Assert.AreNotEqual(GrappleState.Attached, player.Grapple.State,
+                "Arriving at the landing point must release the hook automatically.");
+            Assert.IsFalse(player.Controller.IsBeingPulled);
+            Assert.That(player.Body.position.x, Is.GreaterThan(xBefore + 1f), "The player must reach the wall.");
 
             // The hook must never tunnel through the wall.
             Assert.That(anchor.x, Is.LessThan(6f), "Impact point must be on the near face of the wall.");
@@ -244,17 +265,71 @@ namespace TanLuZhe.Tests
         }
 
         [UnityTest]
+        public IEnumerator Grapple_Wall_AppliesContinuousPullAcceleration()
+        {
+            MakeBox("Wall", new Vector2(14f, 4f), new Vector2(1f, 8f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            yield return StepFixed(2);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(14f, 4f)));
+            yield return StepFixed(20);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+
+            // The pull is an acceleration, so the closing speed has to keep climbing (it is not
+            // pinned to a fixed winch speed like before).
+            float maxPull = 0f;
+            for (int i = 0; i < 12; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                maxPull = Mathf.Max(maxPull, player.Grapple.CurrentPullSpeed);
+            }
+
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.That(maxPull, Is.GreaterThan(8f),
+                "The hook must keep feeding acceleration into the player instead of holding a fixed speed.");
+            Assert.That(maxPull, Is.LessThanOrEqualTo(30.01f), "The pull speed must respect the configured cap.");
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_Wall_AutoReleasesOnArrival()
+        {
+            MakeBox("Wall", new Vector2(6f, 4f), new Vector2(1f, 8f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            yield return StepFixed(2);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 4f)));
+            yield return StepFixed(15);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Controller.IsBeingPulled);
+
+            Vector2 anchor = player.Grapple.CurrentAnchorWorld;
+            float closest = float.MaxValue;
+
+            for (int i = 0; i < 150; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (player.Grapple.State != GrappleState.Attached) break;
+                closest = Mathf.Min(closest, Vector2.Distance(player.Body.position, anchor));
+            }
+
+            Assert.AreNotEqual(GrappleState.Attached, player.Grapple.State,
+                "The hook must detach by itself once the player reaches the landing point.");
+            Assert.IsFalse(player.Controller.IsBeingPulled, "The pull flag must be cleared by the auto release.");
+            Assert.That(closest, Is.LessThanOrEqualTo(1.2f), "It must actually arrive at the landing point first.");
+        }
+
+        [UnityTest]
         public IEnumerator Grapple_Wall_PreservesTangentialMomentum()
         {
-            MakeBox("Wall", new Vector2(4f, 2f), new Vector2(1f, 8f), GameLayers.Ground);
+            MakeBox("Wall", new Vector2(8f, 2f), new Vector2(1f, 8f), GameLayers.Ground);
             Rig player = MakePlayer(new Vector2(0f, 2f));
             yield return StepFixed(2);
 
             // Fire horizontally into the wall while moving straight up: the rope direction and
-            // the velocity are perpendicular, so 100% of the motion is tangential. A rigid rope
-            // may only cancel the radial part, so the upward swing has to survive.
+            // the velocity are perpendicular, so 100% of the motion is tangential. The pull may
+            // only change the radial part, so the upward swing has to survive.
             player.Body.linearVelocity = new Vector2(0f, 20f);
-            Assert.IsTrue(player.Grapple.FireAt(new Vector2(4f, 2f)));
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(8f, 2f)));
             yield return StepFixed(8);
 
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "Hook should latch onto the wall.");
@@ -289,25 +364,40 @@ namespace TanLuZhe.Tests
             Rig enemy = MakeEnemy(new Vector2(6f, 2f), 4f);
             yield return StepFixed(2);
 
-            float playerXBefore = player.Body.position.x;
-            float enemyXBefore = enemy.Body.position.x;
-
             Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 2f)));
-            yield return StepFixed(20);
+
+            int guard = 0;
+            while (player.Grapple.State == GrappleState.Extending && guard++ < 60)
+                yield return new WaitForFixedUpdate();
 
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "Hook should latch onto the enemy.");
             Assert.AreEqual(GrappleAnchorType.Enemy, player.Grapple.AnchorType);
             Assert.IsTrue(player.Grapple.IsAttachedToEnemy);
 
-            yield return StepFixed(40);
+            float playerXBefore = player.Body.position.x;
+            float enemyXBefore = enemy.Body.position.x;
+            float playerXAtContact = playerXBefore;
+            float enemyXAtContact = enemyXBefore;
+            float closest = float.MaxValue;
 
-            float playerDelta = player.Body.position.x - playerXBefore;
-            float enemyDelta = enemy.Body.position.x - enemyXBefore;
+            // Both bodies are dragged toward each other until they actually meet, which is when
+            // the hook releases by itself. Sample the last attached frame, before the collision
+            // bounce can push them apart again.
+            for (int i = 0; i < 150; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (player.Grapple.State != GrappleState.Attached) break;
 
-            Assert.That(enemyDelta, Is.LessThan(-0.2f), "The enemy must be dragged toward the player.");
-            Assert.That(playerDelta, Is.GreaterThan(0.1f), "The player must be dragged toward the enemy.");
-            Assert.That(Vector2.Distance(player.Body.position, enemy.Body.position), Is.LessThan(6f),
-                "The two bodies must close the distance between them.");
+                playerXAtContact = player.Body.position.x;
+                enemyXAtContact = enemy.Body.position.x;
+                closest = Mathf.Min(closest, Vector2.Distance(player.Body.position, enemy.Body.position));
+            }
+
+            Assert.That(enemyXAtContact - enemyXBefore, Is.LessThan(-0.2f),
+                "The enemy must be dragged toward the player.");
+            Assert.That(playerXAtContact - playerXBefore, Is.GreaterThan(0.1f),
+                "The player must be dragged toward the enemy.");
+            Assert.That(closest, Is.LessThan(1.6f), "The two bodies must actually meet.");
         }
 
         [UnityTest]
@@ -324,10 +414,11 @@ namespace TanLuZhe.Tests
             yield return StepFixed(20);
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
 
-            yield return StepFixed(15);
+            yield return StepFixed(4);
 
-            // Only the horizontal axis is compared: gravity acts vertically and the rope here is
-            // horizontal, so every horizontal velocity change comes from the rope's impulses.
+            // Only the horizontal axis is compared, and only for a few steps: gravity acts
+            // vertically, the rope here is horizontal, and stopping before contact keeps the
+            // measurement purely about the rope's impulses.
             float playerSpeedGain = Mathf.Abs(player.Body.linearVelocity.x - playerVelocityBefore.x);
             float enemySpeedGain = Mathf.Abs(heavy.Body.linearVelocity.x - enemyVelocityBefore.x);
 
@@ -371,12 +462,11 @@ namespace TanLuZhe.Tests
             Assert.That(player.Body.linearVelocity.x, Is.EqualTo(velocityAtRelease.x).Within(0.3f),
                 "Horizontal inertia must survive the release untouched.");
 
-            // If the rope were still attached, the winch would immediately pin the closing speed
-            // back to its top value; a coasting body proves the pull is really gone.
+            // If the rope were still attached, the continuous pull would immediately add another
+            // ~1.2 m/s toward the anchor every step; a coasting body proves the pull is gone.
             yield return StepFixed(20);
             Assert.AreEqual(GrappleState.Idle, player.Grapple.State, "The cut rope must retract and go idle.");
-            Assert.That(player.Body.linearVelocity.x, Is.EqualTo(velocityAtRelease.x).Within(0.5f),
-                "Nothing may keep accelerating the player toward the old anchor after the release.");
+            Assert.IsFalse(player.Controller.IsBeingPulled, "Nothing may keep pulling after the release.");
         }
 
         // ================================================================ grapple: misc
@@ -415,22 +505,50 @@ namespace TanLuZhe.Tests
         }
 
         [UnityTest]
-        public IEnumerator Grapple_ReelSpeedRampsUp()
+        public IEnumerator Grapple_Enemy_HeadStaysPinnedToTarget()
         {
-            MakeBox("Wall", new Vector2(6f, 4f), new Vector2(1f, 8f), GameLayers.Ground);
-            Rig player = MakePlayer(new Vector2(0f, 4f));
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            Rig enemy = MakeEnemy(new Vector2(6f, 2f), 1.5f);
             yield return StepFixed(2);
 
-            Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 4f)));
-            yield return StepFixed(12);
-            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
-
-            float early = player.Grapple.CurrentReelSpeed;
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 2f)));
             yield return StepFixed(20);
-            float later = player.Grapple.CurrentReelSpeed;
 
-            Assert.That(later, Is.GreaterThan(early), "The winch must accelerate instead of snapping to full speed.");
-            Assert.That(later, Is.LessThanOrEqualTo(9.51f), "Winch speed must respect the configured maximum.");
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Grapple.IsAttachedToEnemy);
+
+            // Drag the enemy around by hand: the hook head must stay glued onto it.
+            for (int i = 0; i < 6; i++)
+            {
+                enemy.Body.position += new Vector2(0.3f, 0.18f);
+                yield return null; // a frame, so the visual pinning runs
+
+                Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "The hook must stay attached.");
+                Assert.That(Vector2.Distance(player.Grapple.HeadPosition, player.Grapple.CurrentAnchorWorld),
+                    Is.LessThan(0.05f), "The hook head must sit exactly on the hooked enemy.");
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_Enemy_ContactReleasesHook()
+        {
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            Rig enemy = MakeEnemy(new Vector2(4f, 2f), 1f);
+            yield return StepFixed(2);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(4f, 2f)));
+            yield return StepFixed(15);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Grapple.IsAttachedToEnemy);
+
+            for (int i = 0; i < 150 && player.Grapple.State == GrappleState.Attached; i++)
+                yield return new WaitForFixedUpdate();
+
+            Assert.AreNotEqual(GrappleState.Attached, player.Grapple.State,
+                "Touching the hooked enemy must cut the rope automatically.");
+            Assert.IsFalse(player.Controller.IsBeingPulled, "The pull flag must be cleared.");
+            Assert.That(Vector2.Distance(player.Body.position, enemy.Body.position), Is.LessThan(1.6f),
+                "The hook must only let go once the player has actually reached the enemy.");
         }
 
         [UnityTest]

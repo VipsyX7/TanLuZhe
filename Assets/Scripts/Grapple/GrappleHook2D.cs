@@ -44,18 +44,26 @@ namespace TanLuZhe
         [SerializeField] private float _hookRadius = 0.08f;
         [SerializeField] private float _retractSpeed = 70f;
 
-        [Header("Rope")]
-        [Tooltip("Winch speed: how fast the rope shortens while reeling the player in (m/s).")]
-        [SerializeField] private float _maxReelSpeed = 9.5f;
-        [Tooltip("How fast the winch spins up to its top speed (m/s^2). Gives a yank instead of a snap.")]
-        [SerializeField] private float _reelAcceleration = 34f;
-        [SerializeField] private float _minRopeLength = 0.4f;
+        [Header("Pull")]
+        [Tooltip("Constant acceleration applied to the player toward the hook's landing point (m/s^2). " +
+                 "Applied every physics step while hooked, so the pull builds speed instead of snapping. " +
+                 "Must comfortably exceed gravity or a grounded player cannot be lifted.")]
+        [SerializeField] private float _pullAcceleration = 140f;
+        [Tooltip("Speed cap for the pull so the player cannot accelerate forever.")]
+        [SerializeField] private float _maxPullSpeed = 30f;
+        [Tooltip("The hook detaches automatically once the player gets this close to the landing point.")]
+        [SerializeField] private float _releaseDistance = 1f;
         [Tooltip("1 = inextensible rope (outward velocity fully cancelled). <1 = stretchy rope.")]
         [Range(0f, 1f)] [SerializeField] private float _ropeGrip = 1f;
-        [Tooltip("Baumgarte style position error correction, in 1/s.")]
-        [SerializeField] private float _positionCorrection = 9f;
+        [Tooltip("Position error correction, in 1/s. Keeps the rope taut when a frame overshoots.")]
+        [SerializeField] private float _positionCorrection = 8f;
         [Tooltip("Rope snaps if stretched beyond this multiple of its rest length.")]
         [SerializeField] private float _breakStretch = 2.2f;
+
+        [Header("Enemy hook")]
+        [Tooltip("While hooked onto an enemy the head is pinned onto it; the rope lets go as soon as the " +
+                 "player's body touches that enemy.")]
+        [SerializeField] private float _contactReleaseDistance = 0.08f;
 
         [Header("Combat")]
         [SerializeField] private float _attachDamage = 14f;
@@ -83,9 +91,12 @@ namespace TanLuZhe
         private Vector2 _anchorPoint;
         private Vector2 _anchorLocalOffset;
         private Rigidbody2D _anchorBody;
+        private Collider2D _anchorCollider;
         private IGrappleTarget _anchorTarget;
         private float _ropeLength;
-        private float _reelSpeed;
+        private float _currentPullSpeed;
+
+        private Collider2D _playerCollider;
 
         private readonly List<RaycastHit2D> _hits = new List<RaycastHit2D>(8);
         private ContactFilter2D _hitFilter;
@@ -101,7 +112,10 @@ namespace TanLuZhe
         public Vector2 OriginPosition => _origin != null ? (Vector2)_origin.position : (Vector2)transform.position;
         public Vector2 AnchorPoint => _state == GrappleState.Attached ? CurrentAnchorWorld : _head;
         public float RopeLength => _ropeLength;
-        public float CurrentReelSpeed => _reelSpeed;
+
+        /// <summary>How fast the player is currently being pulled toward the anchor (m/s).</summary>
+        public float CurrentPullSpeed => _currentPullSpeed;
+
         public float MaxRange => _maxRange;
         public IGrappleTarget AnchorTarget => _anchorTarget;
 
@@ -135,6 +149,7 @@ namespace TanLuZhe
         {
             _playerBody = GetComponentInParent<Rigidbody2D>();
             _player = GetComponentInParent<PlayerController2D>();
+            if (_playerBody != null) _playerCollider = _playerBody.GetComponent<Collider2D>();
             _rope = GetComponent<GrappleRopeRenderer>();
             if (_rope == null) _rope = gameObject.AddComponent<GrappleRopeRenderer>();
 
@@ -359,10 +374,10 @@ namespace TanLuZhe
                 _anchorPoint = hit.point;
             }
 
+            _anchorCollider = hit.collider;
             _head = CurrentAnchorWorld;
-            _ropeLength = Vector2.Distance(OriginPosition, CurrentAnchorWorld);
-            _ropeLength = Mathf.Max(_minRopeLength, _ropeLength);
-            _reelSpeed = 0f;
+            _ropeLength = Mathf.Max(0.05f, Vector2.Distance(OriginPosition, CurrentAnchorWorld));
+            _currentPullSpeed = 0f;
             _state = GrappleState.Attached;
 
             if (_anchorTarget != null)
@@ -395,12 +410,14 @@ namespace TanLuZhe
                 return;
             }
 
-            // Spin the winch up smoothly: a yank, not a teleport.
-            _reelSpeed = Mathf.MoveTowards(_reelSpeed, _maxReelSpeed, _reelAcceleration * dt);
-            _ropeLength = Mathf.Max(_minRopeLength, _ropeLength - _reelSpeed * dt);
+            // While hooked the head rides along with whatever it latched onto, so a hooked
+            // enemy literally drags the hook with it (and the rope end stays glued to it).
+            _head = CurrentAnchorWorld;
 
             if (_anchorBody == null) SolveStaticAnchor(dt);
             else SolveTwoBodyAnchor(dt);
+
+            if (_state != GrappleState.Attached) return;   // a solver may have released us
 
             if (_player != null) _player.SetBeingPulled(true);
 
@@ -409,31 +426,40 @@ namespace TanLuZhe
             if (dist > _ropeLength * _breakStretch + 1f) Release();
         }
 
-        /// <summary>Rope latched to level geometry: only the player is solved.</summary>
+        /// <summary>
+        /// Rope latched to level geometry. Every physics step a constant acceleration is applied
+        /// toward the landing point; the tangential velocity is never touched, so the player keeps
+        /// whatever momentum they had and simply gets pulled in. The hook lets go by itself once
+        /// the player arrives at the landing point.
+        /// </summary>
         private void SolveStaticAnchor(float dt)
         {
             Vector2 origin = OriginPosition;
             Vector2 delta = _anchorPoint - origin;
             float dist = delta.magnitude;
-            Vector2 toward = dist > 1e-4f ? delta / dist : Vector2.zero;
+            if (dist < 1e-4f)
+            {
+                Release();
+                return;
+            }
 
+            Vector2 toward = delta / dist;      // player -> landing point
             Vector2 v = _playerBody.linearVelocity;
 
-            // While the winch still has rope to take in it drives the closing speed. Once the
-            // rope is at its minimum length it becomes a plain inextensible rope: it may not
-            // stretch, but it must not keep shoving the player into the anchor either.
-            float desiredClosing = _ropeLength > _minRopeLength + 1e-4f ? _reelSpeed : 0f;
+            // 1) continuous pull: acceleration toward the anchor, capped at _maxPullSpeed.
+            float radial = Vector2.Dot(v, toward);
+            if (radial < _maxPullSpeed)
+            {
+                float add = Mathf.Min(_pullAcceleration * dt, _maxPullSpeed - radial);
+                v += toward * add;
+            }
 
+            // 2) the rope may not stretch: only the outward radial component is removed, so the
+            //    tangential component (the swing / the inertia) survives untouched.
             if (dist >= _ropeLength - 1e-4f)
             {
-                // Taut rope: the radial component may not open the distance, and the winch
-                // actively closes it. The tangential component is untouched -> swing kept.
-                float radial = Vector2.Dot(v, toward);
-                if (radial < desiredClosing)
-                {
-                    float add = (desiredClosing - radial) * _ropeGrip;
-                    v += toward * add;
-                }
+                float outward = Vector2.Dot(v, toward);
+                if (outward < 0f) v -= toward * (outward * _ropeGrip);
             }
 
             if (dist > _ropeLength)
@@ -443,12 +469,16 @@ namespace TanLuZhe
             }
 
             _playerBody.linearVelocity = v;
+            _currentPullSpeed = Mathf.Max(0f, Vector2.Dot(v, toward));
+
+            // 3) arrived at the landing point -> detach automatically, keeping the momentum.
+            if (dist <= _releaseDistance) Release();
         }
 
         /// <summary>
-        /// Rope latched to a dynamic body: equal and opposite, mass weighted impulses so that
-        /// both the enemy and the player are dragged toward each other and total momentum is
-        /// conserved.
+        /// Rope latched to a dynamic body: the same continuous pull is applied to both bodies as
+        /// equal and opposite, mass weighted impulses, so the enemy is dragged toward the player
+        /// and the player is dragged toward the enemy with total momentum conserved.
         /// </summary>
         private void SolveTwoBodyAnchor(float dt)
         {
@@ -466,18 +496,23 @@ namespace TanLuZhe
             Vector2 vp = _playerBody.linearVelocity;
             Vector2 ve = _anchorBody.linearVelocity;
 
-            float desiredClosing = _ropeLength > _minRopeLength + 1e-4f ? _reelSpeed : 0f;
+            // 1) continuous pull toward each other (positive = already closing).
+            float closing = Vector2.Dot(vp - ve, toward);
+            if (closing < _maxPullSpeed)
+            {
+                float add = Mathf.Min(_pullAcceleration * dt, _maxPullSpeed - closing);
+                float impulse = add / invSum;
+                vp += toward * (impulse * invP);
+                ve -= toward * (impulse * invE);
+            }
 
+            // 2) the rope may not stretch: remove the separating relative velocity.
             if (dist >= _ropeLength - 1e-4f)
             {
-                // Relative velocity along the rope. Positive = separating.
                 float relative = Vector2.Dot(ve - vp, toward);
-                float desired = -desiredClosing; // close in at winch speed
-
-                if (relative > desired)
+                if (relative > 0f)
                 {
-                    float excess = (relative - desired) * _ropeGrip;
-                    float impulse = excess / invSum;
+                    float impulse = (relative * _ropeGrip) / invSum;
                     vp += toward * (impulse * invP);
                     ve -= toward * (impulse * invE);
                 }
@@ -493,6 +528,20 @@ namespace TanLuZhe
 
             _playerBody.linearVelocity = vp;
             _anchorBody.linearVelocity = ve;
+            _currentPullSpeed = Mathf.Max(0f, closing);
+
+            // 3) the player touched the hooked enemy -> let go of the rope.
+            if (_anchorType == GrappleAnchorType.Enemy && IsTouchingAnchor()) Release();
+        }
+
+        /// <summary>True once the player's body is in contact with the hooked collider.</summary>
+        private bool IsTouchingAnchor()
+        {
+            if (_playerCollider == null || _anchorCollider == null) return false;
+
+            ColliderDistance2D distance = _playerCollider.Distance(_anchorCollider);
+            if (!distance.isValid) return false;
+            return distance.isOverlapped || distance.distance <= _contactReleaseDistance;
         }
 
         private void StepRetracting(float dt)
@@ -513,6 +562,7 @@ namespace TanLuZhe
             if (_anchorTarget != null) _anchorTarget.OnGrappleDetached();
             _anchorTarget = null;
             _anchorBody = null;
+            _anchorCollider = null;
             _anchorType = GrappleAnchorType.None;
             _state = GrappleState.Retracting;
             if (_player != null) _player.SetBeingPulled(false);
@@ -523,8 +573,9 @@ namespace TanLuZhe
             if (_anchorTarget != null) _anchorTarget.OnGrappleDetached();
             _anchorTarget = null;
             _anchorBody = null;
+            _anchorCollider = null;
             _anchorType = GrappleAnchorType.None;
-            _reelSpeed = 0f;
+            _currentPullSpeed = 0f;
             if (_player != null) _player.SetBeingPulled(false);
 
             if (retract)
@@ -547,8 +598,20 @@ namespace TanLuZhe
             if (_headVisual.activeSelf != visible) _headVisual.SetActive(visible);
             if (!visible) return;
 
+            // While attached the head is pinned to the anchor every frame (not only every
+            // physics step) so a hooked enemy can never visually slip away from the hook.
+            if (_state == GrappleState.Attached) _head = CurrentAnchorWorld;
+
             _headVisual.transform.position = new Vector3(_head.x, _head.y, 0f);
-            float angle = Mathf.Atan2(_direction.y, _direction.x) * Mathf.Rad2Deg;
+
+            // Attached: the hook points along the rope (so it visibly stays "stuck" to a moving
+            // enemy). Extending: it points along the flight direction.
+            Vector2 aim = _state == GrappleState.Attached
+                ? _head - OriginPosition
+                : _direction;
+            if (aim.sqrMagnitude < 1e-6f) aim = _direction;
+
+            float angle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
             _headVisual.transform.rotation = Quaternion.Euler(0f, 0f, angle);
         }
 

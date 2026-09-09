@@ -93,7 +93,8 @@ namespace TanLuZhe.EditorTools
                 Check(GetRef(grapple, "_origin") != null, "Hook muzzle transform assigned");
                 Check(GetInt(grapple, "_hitMask") != 0, "Hook hit mask is configured");
                 Check(GetFloat(grapple, "_maxRange") > 4f, "Hook range is usable");
-                Check(GetFloat(grapple, "_maxReelSpeed") > 1f, "Winch speed is usable");
+                Check(GetFloat(grapple, "_pullAcceleration") > 5f, "Hook pull acceleration is usable");
+                Check(GetFloat(grapple, "_releaseDistance") > 0f, "Hook auto-release distance configured");
 
                 GrappleRopeRenderer rope = grapple.GetComponent<GrappleRopeRenderer>();
                 Check(rope != null, "Hook has a rope renderer");

@@ -51,41 +51,52 @@ TanLuZhe ▸ Build Everything (art + project + scene)
 状态机：`Idle → Extending → Attached → Retracting`。
 发射时沿指针方向用 `Physics2D.CircleCast` 逐帧推进钩头（半径 0.08，避免从墙角漏过），命中后按命中物类型分流。
 
-### 1. 命中墙壁 —— 保持惯性，把玩家拉向落点
+### 1. 命中墙壁 —— 持续加速度拉向落点，到达后自动脱钩
 
-绳索被解成**单向距离约束**，在 `FixedUpdate` 里只改径向分量、完全不碰切向分量：
+绳索被解成**单向距离约束 + 持续加速度**，在 `FixedUpdate` 里只改径向分量、完全不碰切向分量：
 
 ```csharp
 Vector2 toward = (anchor - origin).normalized;   // 玩家 -> 落点
-float radial  = Vector2.Dot(velocity, toward);   // 向外（远离落点）为正
+
+// 1) 持续加速度：每一步都朝落点加速，速度上限 _maxPullSpeed
+float radial = Vector2.Dot(velocity, toward);
+if (radial < maxPullSpeed)
+    velocity += toward * Mathf.Min(pullAcceleration * dt, maxPullSpeed - radial);
+
+// 2) 不可伸长的绳子：只清除"远离落点"的径向分量
 if (dist >= ropeLength) {
-    // 绷紧：径向速度不得再把绳子拉长，同时绞盘以 reelSpeed 收绳
-    if (radial < desiredClosing) velocity += toward * (desiredClosing - radial);
+    float outward = Vector2.Dot(velocity, toward);
+    if (outward < 0f) velocity -= toward * outward;
 }
-if (dist > ropeLength)                            // Baumgarte 位置误差修正
-    velocity += toward * (dist - ropeLength) * positionCorrection;
+
+// 3) 到达落点 -> 自动脱钩，速度原样保留
+if (dist <= releaseDistance) Release();
 ```
 
 * **切向速度被完整保留** → 玩家是在钩点周围**荡秋千**（真实钟摆），不是被瞬移过去。这就是"保持物理惯性"。
-* 绞盘速度 `_reelSpeed` 由 `_reelAcceleration` 从 0 平滑加速到 `_maxReelSpeed`（默认 8.5 m/s），所以是**甩**过去而不是瞬间弹射。
-* 绳长收到 `_minRopeLength`（0.8 m）后绞盘停止出力，绳子退化为不可伸长的刚绳：**只禁止拉开，不再继续往里推**，玩家就吊在落点附近。
+* `_pullAcceleration` 默认 **140 m/s²**（必须明显大于重力，否则站在地上的玩家拉不动 —— 重力 74 m/s² + 抓地力 18 m/s²）；`_maxPullSpeed` 默认 30 m/s 封顶。
+* **钩锁拉扯期间、且玩家没有按方向键时，角色控制器不做任何自身减速**（`ApplyHorizontalMovement` 提前返回）。否则地面减速 95 m/s² 会直接吃掉 140 m/s² 的拉扯。
+* 绳子长度在挂钩瞬间固定，不再收缩：拉力是"持续加速度"，不是绞盘恒速。
+* 玩家中心与落点距离 ≤ `_releaseDistance`（默认 1.0 m）时**自动解除钩锁**，玩家带着当前速度继续飞出去。
 * 撞墙时 `collisionDetectionMode = Continuous`，高速拉扯不会穿模。
 
 ### 2. 命中敌方单位 —— 双向拉扯（等大反向冲量，按质量分配）
 
-命中 `IGrappleTarget`（敌人 / 移动平台）时，同一约束对**两个刚体**求解，冲量等大反向：
+命中 `IGrappleTarget`（敌人 / 移动平台）时，同一条持续加速度对**两个刚体**求解，冲量等大反向：
 
 ```csharp
 float invP = 1/playerMass, invE = 1/enemyMass, invSum = invP + invE;
-float relative = Dot(enemyVel - playerVel, toward);   // 正 = 互相远离
-if (relative > -reelSpeed) {
-    float impulse = (relative + reelSpeed) / invSum;
-    playerVel += toward * (impulse * invP);           // 玩家被拉向敌人
-    enemyVel  -= toward * (impulse * invE);           // 敌人被拉向玩家
+float closing = Dot(playerVel - enemyVel, toward);       // 正 = 正在靠近
+if (closing < maxPullSpeed) {
+    float impulse = Mathf.Min(pullAcceleration * dt, maxPullSpeed - closing) / invSum;
+    playerVel += toward * (impulse * invP);              // 玩家被拉向敌人
+    enemyVel  -= toward * (impulse * invE);              // 敌人被拉向玩家
 }
 ```
 
 * **总动量守恒**（等大反向冲量），轻的一方被拉得多、重的一方被拉得少 —— 演示关卡里那个 3.6 质量的重装敌人会明显把你拽过去。
+* **锁头始终与敌人重合**：挂钩后每帧（`Update` 里，不只是物理帧）把钩头位置钉在敌人身上的挂点 `CurrentAnchorWorld`，钩头朝向也沿绳索方向，所以敌人被拖动时钩子会牢牢"挂"在它身上。
+* **玩家身体一碰到被勾住的敌人就自动脱钩**（`Collider2D.Distance` 检测重叠/接触，`_contactReleaseDistance` 默认 0.08 m），不需要手动松钩。
 * 敌人被钩中时会掉血、进入硬直，并且**马达出力降到 30%**，形成可读的"拔河"。
 * 敌人死亡 / 被销毁时自动脱钩。
 
@@ -98,7 +109,7 @@ public void Release() {
 ```
 
 `Release()` **一个字节都不动刚体速度**：绳索消失，当帧速度原样保留 → 惯性完整保留，拉扯立刻消失。
-同时 `PlayerController2D.SetBeingPulled(false)` 恢复空中操控系数。
+同时 `PlayerController2D.SetBeingPulled(false)` 恢复空中操控系数与正常制动。
 
 ### 其它细节
 
@@ -168,20 +179,23 @@ Unity.exe -batchmode -projectPath <项目> -runTests -testPlatform PlayMode -tes
 | `Player_FallsAndRestsOnGround` | 落到地面并稳定静止 |
 | `Player_JumpReachesConfiguredHeight` | 跳跃顶点高度 ≈ 配置值 3.1（±0.6） |
 | `Player_KeepsAirMomentum_WithoutInput` | 空中无输入**不擦除**水平动量 |
-| `Player_WallSlideLimitsFallSpeed` | 贴墙下落被限速 |
+| `Player_WallSlideLimitsFallSpeed` | 贴墙下落被限速（现在精确钳到 4.5 m/s） |
 | `Grapple_Wall_PullsPlayerTowardImpactPoint` | **命中墙壁后玩家被拉向落点**、绳索绷紧、落点在墙面内侧 |
+| `Grapple_Wall_AppliesContinuousPullAcceleration` | **拉扯是"持续加速度"**（收拢速度不断攀升）且受上限约束 |
+| `Grapple_Wall_AutoReleasesOnArrival` | **玩家到达落点后自动脱钩**，脱钩时确实已经到达（最近距离 ≤1.2 m） |
 | `Grapple_Wall_PreservesTangentialMomentum` | **切向（惯性）速度在拉扯中保留 ≥55%**，径向才被改变 |
-| `Grapple_Enemy_PullsBothBodiesTogether` | **敌人被拉向玩家、玩家被拉向敌人**，间距缩小 |
+| `Grapple_Enemy_PullsBothBodiesTogether` | **敌人被拉向玩家、玩家被拉向敌人**，最终真正接触 |
 | `Grapple_Enemy_PullIsMassWeighted` | 4 倍质量的敌人位移只有玩家的 ~1/4（等大反向冲量） |
+| `Grapple_Enemy_HeadStaysPinnedToTarget` | **锁头始终与敌人重合**（把敌人手动拖动，钩头误差 < 0.05 m） |
+| `Grapple_Enemy_ContactReleasesHook` | **玩家碰到被勾中的敌人时自动脱钩** |
 | `Grapple_LeftCtrl_ReleasesAndKeepsInertia` | **左 Ctrl 脱钩后水平惯性原样保留**，且不再被加速 |
 | `Grapple_Miss_RetractsToIdle` | 空放后自动收回 |
 | `Grapple_EnemyDeath_DetachesHook` | 目标销毁自动脱钩 |
-| `Grapple_ReelSpeedRampsUp` | 绞盘是加速而不是瞬发 |
 | `Enemy_MassHeavier_MeansLessAcceleration` | 质量对同尺寸冲量的影响生效 |
-| `DemoScene_RunsEndToEnd` | **加载真实演示场景**跑完整流程：落地→跑→跳→钩墙上爬→Ctrl 脱钩→钩敌人→相机跟随，期间任何异常/错误日志都会导致失败 |
+| `DemoScene_RunsEndToEnd` | **加载真实演示场景**跑完整流程：落地→跑→跳→钩墙（Ctrl 脱钩）→再钩墙（到达自动脱钩）→钩敌人（接触自动脱钩）→相机跟随，期间任何异常/错误日志都会导致失败 |
 | `DemoScene_EnemiesPatrolAndPickupsExist` | 场景内容齐备且敌人真的在巡逻 |
 
-### 场景静态校验：47 项检查全过
+### 场景静态校验：48 项检查全过
 
 ```
 Unity.exe -batchmode -quit -projectPath <项目> -executeMethod TanLuZhe.EditorTools.BuildPipelineEntry.BuildAndValidate
@@ -198,8 +212,10 @@ Unity.exe -batchmode -quit -projectPath <项目> -executeMethod TanLuZhe.EditorT
 | 想要的效果 | 改哪里 |
 |---|---|
 | 钩子飞得更远 / 更快 | `GrappleHook2D._maxRange` / `_hookSpeed` |
-| 拉得更猛 / 更柔和 | `_maxReelSpeed`、`_reelAcceleration` |
-| 吊得更靠近落点 | `_minRopeLength`（越小越贴脸） |
+| 拉得更猛 / 更柔和 | `_pullAcceleration`（默认 140，需 > 重力 74 + 抓地 18 才能把站立的玩家拉起） |
+| 拉扯速度上限 | `_maxPullSpeed`（默认 30 m/s） |
+| 更早 / 更晚自动脱钩 | `_releaseDistance`（默认 1.0 m） |
+| 碰敌人后更早脱钩 | `_contactReleaseDistance` |
 | 绳子更"弹" | `_ropeGrip`（1 = 完全不可伸长） |
 | 钩敌人时更拉扯 | `EnemyController2D._grappleMotorFactor`（越小越拉得动） |
 | 跳得更高 / 更飘 | `PlayerController2D._jumpHeight`、`_riseGravity`、`_fallGravity` |

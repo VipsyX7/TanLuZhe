@@ -71,8 +71,6 @@ namespace TanLuZhe.Tests
             controller.SetInputSource(input);
             grapple.SetInputSource(input);
 
-            float cameraStartX = rig.transform.position.x;
-
             // ---- the player settles on the floor
             yield return StepFixed(45);
             Assert.IsTrue(controller.IsGrounded, "The player should land on the starting ground.");
@@ -102,25 +100,29 @@ namespace TanLuZhe.Tests
 
             yield return StepFixed(45);
 
-            // ---- grapple the tall wall at x = 36..39 and winch up its right face.
-            // Approaching from ground C (39..44) keeps the test clear of the patrolling enemy
-            // that owns ground B, so the result depends only on the rope.
+            // ---- grapple the tall wall at x = 36..39. Approaching from ground C (39..44) keeps
+            // the test clear of the patrolling enemy that owns ground B.
+            // (a) Left Ctrl cuts the rope while the pull is still running. Jump first so the
+            // release happens in the air, where the momentum check is meaningful (on the ground
+            // the controller is allowed to brake once the rope is gone).
             controller.Teleport(new Vector2(42f, 1f));
             yield return StepFixed(30);
             Assert.IsTrue(controller.IsGrounded,
                 $"Teleport target should be on the ground (pos={controller.transform.position}, vel={controller.Body.linearVelocity}).");
 
+            input.JumpDown = true;
+            input.JumpHeld = true;
+            yield return new WaitForFixedUpdate();
+            input.JumpDown = false;
+            input.JumpHeld = false;
+            yield return StepFixed(4);
+
             Assert.IsTrue(grapple.FireAt(new Vector2(39f, 5f)), "The hook should launch toward the wall.");
-            yield return StepFixed(15);
+            yield return StepFixed(10);
             Assert.AreEqual(GrappleState.Attached, grapple.State, "The hook should latch onto the level geometry.");
             Assert.AreEqual(GrappleAnchorType.Wall, grapple.AnchorType);
+            Assert.IsTrue(controller.IsBeingPulled, "The player should be flagged as pulled.");
 
-            float yBeforePull = controller.transform.position.y;
-            yield return StepFixed(60);
-            Assert.That(controller.transform.position.y, Is.GreaterThan(yBeforePull + 1f),
-                "Winching toward the impact point should lift the player up the wall.");
-
-            // ---- cut the rope with Left Ctrl
             Vector2 velocityAtRelease = controller.Body.linearVelocity;
             input.ReleaseHeld = true;
             yield return null;
@@ -132,8 +134,27 @@ namespace TanLuZhe.Tests
             Assert.That(controller.Body.linearVelocity.x, Is.EqualTo(velocityAtRelease.x).Within(0.4f),
                 "Releasing must not destroy the horizontal momentum.");
 
-            yield return StepFixed(25);
+            yield return StepFixed(30);
             Assert.AreEqual(GrappleState.Idle, grapple.State, "The cut rope should retract back to the player.");
+
+            // (b) The pull keeps accelerating and the hook lets go by itself at the landing point.
+            controller.Teleport(new Vector2(42f, 1f));
+            yield return StepFixed(30);
+
+            Assert.IsTrue(grapple.FireAt(new Vector2(39f, 6f)));
+            int guard = 0;
+            while (grapple.State == GrappleState.Extending && guard++ < 60) yield return new WaitForFixedUpdate();
+            Assert.AreEqual(GrappleState.Attached, grapple.State, "The hook should latch onto the wall again.");
+
+            float yAtAttach = controller.transform.position.y;
+            guard = 0;
+            while (grapple.State == GrappleState.Attached && guard++ < 240) yield return new WaitForFixedUpdate();
+
+            Assert.AreNotEqual(GrappleState.Attached, grapple.State,
+                "The hook must detach by itself once the player reaches the landing point.");
+            Assert.IsFalse(controller.IsBeingPulled, "The auto release must clear the pull flag.");
+            Assert.That(controller.transform.position.y, Is.GreaterThan(yAtAttach + 0.5f),
+                "The continuous pull should have lifted the player up the wall.");
 
             // ---- grapple an enemy. Pick the patroller on the opening flat ground so the line
             // from the player to the enemy is clear of platforms (the hook would otherwise
@@ -155,22 +176,28 @@ namespace TanLuZhe.Tests
             yield return StepFixed(30);
 
             Assert.IsTrue(grapple.FireAt(enemy.transform.position));
-            yield return StepFixed(25);
+            int hookGuard = 0;
+            while (grapple.State == GrappleState.Extending && hookGuard++ < 60) yield return new WaitForFixedUpdate();
+
             Assert.AreEqual(GrappleState.Attached, grapple.State, "The hook should latch onto the enemy.");
             Assert.AreEqual(GrappleAnchorType.Enemy, grapple.AnchorType);
             Assert.IsTrue(controller.IsBeingPulled, "The player should be flagged as pulled by the enemy rope.");
+            Assert.That(Vector2.Distance(grapple.HeadPosition, grapple.CurrentAnchorWorld), Is.LessThan(0.2f),
+                "The hook head must stay glued to the hooked enemy.");
 
-            yield return StepFixed(30);
+            // Both bodies are dragged together until the player's body actually touches the enemy,
+            // at which point the rope lets go by itself.
+            hookGuard = 0;
+            while (grapple.State == GrappleState.Attached && hookGuard++ < 240) yield return new WaitForFixedUpdate();
 
-            input.ReleaseHeld = true;
-            yield return null;
-            input.ReleaseHeld = false;
+            Assert.AreNotEqual(GrappleState.Attached, grapple.State,
+                "Touching the hooked enemy must cut the rope automatically.");
             Assert.IsFalse(controller.IsBeingPulled, "Cutting the enemy rope should clear the pull flag.");
 
-            // ---- the world keeps running: the camera followed, no errors were logged
+            // ---- the world keeps running: the camera tracked the player, no errors were logged
             yield return StepFixed(20);
-            Assert.That(rig.transform.position.x, Is.GreaterThan(cameraStartX + 2f),
-                "The camera should have followed the player across the level.");
+            Assert.That(Mathf.Abs(rig.transform.position.x - controller.transform.position.x), Is.LessThan(12f),
+                "The camera should still be tracking the player after the whole run.");
         }
 
         [UnityTest]
