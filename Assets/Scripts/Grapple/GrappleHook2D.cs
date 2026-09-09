@@ -51,7 +51,7 @@ namespace TanLuZhe
         [Header("Pull")]
         [Tooltip("Constant acceleration applied to the player toward the hook's landing point (m/s^2). " +
                  "Applied every physics step while hooked, so the pull builds speed instead of snapping. " +
-                 "Must comfortably exceed gravity or a grounded player cannot be lifted.")]
+                 "Gravity is suspended while the rope is attached, so this is the only force acting.")]
         [Range(20f, 400f)] [SerializeField] private float _pullAcceleration = 140f;
         [Tooltip("Speed cap for the pull so the player cannot accelerate forever.")]
         [Range(5f, 60f)] [SerializeField] private float _maxPullSpeed = 30f;
@@ -409,6 +409,13 @@ namespace TanLuZhe
         private void StepAttached(float dt)
         {
             if (_playerBody == null)
+            {
+                Release();
+                return;
+            }
+
+            // Dead players do not get dragged around by a rope.
+            if (_player != null && _player.IsDead)
             {
                 Release();
                 return;

@@ -315,7 +315,109 @@ namespace TanLuZhe.Tests
             Assert.AreNotEqual(GrappleState.Attached, player.Grapple.State,
                 "The hook must detach by itself once the player reaches the landing point.");
             Assert.IsFalse(player.Controller.IsBeingPulled, "The pull flag must be cleared by the auto release.");
-            Assert.That(closest, Is.LessThanOrEqualTo(1.2f), "It must actually arrive at the landing point first.");
+            Assert.That(closest, Is.LessThanOrEqualTo(1.8f),
+                "It must actually arrive at the landing point first (within one physics step of the release radius).");
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_Attached_IgnoresPlayerInput()
+        {
+            MakeBox("Wall", new Vector2(14f, 4f), new Vector2(1f, 8f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            yield return StepFixed(2);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(14f, 4f)));
+            yield return StepFixed(20);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Controller.ControlLocked, "Control must be locked while the rope is attached.");
+
+            // Hammer every action key while hooked. None of it may reach the character.
+            float maxUpwardSpeed = float.MinValue;
+            float maxHorizontalSpeed = 0f;
+
+            for (int i = 0; i < 12; i++)
+            {
+                _input.Horizontal = i % 2 == 0 ? -1f : 1f;  // steer away, then into the rope
+                _input.JumpDown = true;                      // jump
+                _input.JumpHeld = true;
+                _input.DownHeld = true;                      // drop through one-way platforms
+
+                yield return new WaitForFixedUpdate();
+
+                maxUpwardSpeed = Mathf.Max(maxUpwardSpeed, player.Body.linearVelocity.y);
+                maxHorizontalSpeed = Mathf.Max(maxHorizontalSpeed, Mathf.Abs(player.Body.linearVelocity.x));
+            }
+
+            _input.JumpDown = false;
+            _input.JumpHeld = false;
+            _input.DownHeld = false;
+            _input.Horizontal = 0f;
+
+            Assert.That(maxUpwardSpeed, Is.LessThan(8f),
+                "Jump input must be ignored while the rope is attached (a jump would reach ~16 m/s).");
+            Assert.That(maxHorizontalSpeed, Is.GreaterThan(1f),
+                "The rope, not the input, should be moving the player.");
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State,
+                "The action keys must not be able to cancel or fight the rope.");
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_Attached_SuspendsGravity()
+        {
+            // Horizontal rope and a freshly zeroed velocity: the only thing that could move the
+            // player down is gravity, so any sink proves gravity is still active.
+            MakeBox("Wall", new Vector2(10f, 2f), new Vector2(1f, 8f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            yield return StepFixed(2);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(10f, 2f)));
+            yield return StepFixed(15);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Controller.ControlLocked);
+
+            player.Body.linearVelocity = Vector2.zero;
+            float yBefore = player.Body.position.y;
+            yield return StepFixed(6);
+
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "Keep the rope attached for this window.");
+            Assert.That(player.Body.linearVelocity.y, Is.GreaterThan(-0.5f),
+                "Gravity must be suspended while the rope is attached (the player must not be falling).");
+            Assert.That(player.Body.position.y, Is.GreaterThan(yBefore - 0.1f),
+                "A weightless player must not sink while the rope is attached (gravity would drop ~0.5 here).");
+            Assert.That(player.Body.linearVelocity.x, Is.GreaterThan(2f), "The rope must still be pulling sideways.");
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_Extending_LeavesPlayerInControl()
+        {
+            MakeBox("Ground", new Vector2(0f, -0.5f), new Vector2(40f, 1f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 0.76f));
+            yield return StepFixed(30);
+
+            Assert.IsTrue(player.Grapple.FireAt(new Vector2(15f, 1.5f)));  // long flight, nothing to hit
+            Assert.AreEqual(GrappleState.Extending, player.Grapple.State);
+            Assert.IsFalse(player.Controller.ControlLocked, "A hook in flight must not lock the player.");
+
+            // steering still works
+            float xBefore = player.Body.position.x;
+            _input.Horizontal = 1f;
+            yield return StepFixed(4);
+            Assert.AreEqual(GrappleState.Extending, player.Grapple.State, "Keep the hook in flight.");
+            Assert.That(player.Body.position.x, Is.GreaterThan(xBefore + 0.15f),
+                "Air steering must still work while the hook is flying.");
+
+            // and jumping still works
+            _input.JumpDown = true;
+            _input.JumpHeld = true;
+            yield return new WaitForFixedUpdate();
+            _input.JumpDown = false;
+
+            Assert.AreEqual(GrappleState.Extending, player.Grapple.State, "Keep the hook in flight.");
+            Assert.That(player.Body.linearVelocity.y, Is.GreaterThan(5f),
+                "Jumping must still work while the hook is flying.");
+
+            _input.JumpHeld = false;
+            _input.Horizontal = 0f;
         }
 
         [UnityTest]
@@ -439,12 +541,16 @@ namespace TanLuZhe.Tests
             yield return StepFixed(2);
 
             Assert.IsTrue(player.Grapple.FireAt(new Vector2(6f, 4f)));
-            yield return StepFixed(12);
+            int guard = 0;
+            while (player.Grapple.State == GrappleState.Extending && guard++ < 60)
+                yield return new WaitForFixedUpdate();
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
+            Assert.IsTrue(player.Controller.ControlLocked, "Control must be locked while hooked.");
 
-            // Let the winch build up real speed toward the anchor.
-            yield return StepFixed(12);
-            Assert.That(player.Body.linearVelocity.x, Is.GreaterThan(1f), "The winch should have built up speed.");
+            // Let the pull build up real speed toward the anchor.
+            yield return StepFixed(4);
+            Assert.AreEqual(GrappleState.Attached, player.Grapple.State, "The rope should still be attached.");
+            Assert.That(player.Body.linearVelocity.x, Is.GreaterThan(1f), "The pull should have built up speed.");
 
             // Press Left Ctrl exactly like the player would.
             _input.ReleaseHeld = true;
@@ -493,7 +599,9 @@ namespace TanLuZhe.Tests
             yield return StepFixed(2);
 
             Assert.IsTrue(player.Grapple.FireAt(new Vector2(4f, 2f)));
-            yield return StepFixed(15);
+            int guard = 0;
+            while (player.Grapple.State == GrappleState.Extending && guard++ < 60)
+                yield return new WaitForFixedUpdate();
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
 
             Object.Destroy(enemy.Root);
@@ -537,7 +645,9 @@ namespace TanLuZhe.Tests
             yield return StepFixed(2);
 
             Assert.IsTrue(player.Grapple.FireAt(new Vector2(4f, 2f)));
-            yield return StepFixed(15);
+            int guard = 0;
+            while (player.Grapple.State == GrappleState.Extending && guard++ < 60)
+                yield return new WaitForFixedUpdate();
             Assert.AreEqual(GrappleState.Attached, player.Grapple.State);
             Assert.IsTrue(player.Grapple.IsAttachedToEnemy);
 

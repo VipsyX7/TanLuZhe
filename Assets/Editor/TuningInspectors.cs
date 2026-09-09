@@ -83,6 +83,8 @@ namespace TanLuZhe.EditorTools
             LiveStateGui.Row("Grounded", controller.IsGrounded);
             LiveStateGui.Row("Wall sliding", controller.IsWallSliding);
             LiveStateGui.Row("Pulled by rope", controller.IsBeingPulled);
+            LiveStateGui.Row("Control locked (input ignored)", controller.ControlLocked);
+            LiveStateGui.Row("Gravity active", !controller.ControlLocked);
             LiveStateGui.Row("Velocity", controller.Velocity);
             LiveStateGui.Row("Speed (m/s)", controller.Velocity.magnitude);
             LiveStateGui.Row("Facing", controller.FacingSign);

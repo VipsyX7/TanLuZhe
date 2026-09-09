@@ -39,9 +39,6 @@ namespace TanLuZhe
         [Range(0f, 200f)] [SerializeField] private float _airDeceleration = 26f;
         [Tooltip("Extra acceleration when reversing direction.")]
         [Range(1f, 4f)] [SerializeField] private float _turnAroundBoost = 1.8f;
-        [Tooltip("Air control multiplier applied while the grapple rope is pulling the player. " +
-                 "Lower = more inertia, less ability to fight the rope.")]
-        [Range(0f, 1f)] [SerializeField] private float _grappleAirControl = 0.45f;
 
         // ----------------------------------------------------------------- jump
         [Header("Jump")]
@@ -90,7 +87,6 @@ namespace TanLuZhe
         private Rigidbody2D _rb;
         private CapsuleCollider2D _col;
         private IInputSource _input;
-        private GrappleHook2D _grapple;
         private PlayerHealth _health;
 
         private readonly ContactPoint2D[] _contacts = new ContactPoint2D[16];
@@ -143,8 +139,31 @@ namespace TanLuZhe
         /// <summary>Gravity magnitude currently being applied (m/s^2), for slope grip math.</summary>
         public float CurrentGravity => _appliedGravity > 0.01f ? _appliedGravity : _fallGravity;
 
-        /// <summary>Hook used by the grapple system to flag "the rope is pulling me right now".</summary>
-        public void SetBeingPulled(bool pulled) => IsBeingPulled = pulled;
+        /// <summary>Hook used by the grapple system to flag "the rope owns the character right now".</summary>
+        public void SetBeingPulled(bool pulled)
+        {
+            if (pulled && !IsBeingPulled)
+            {
+                // Entering the pull: drop every queued action so nothing fires the moment the
+                // rope lets go, and forget the moving platform reference (it goes stale while
+                // the character is off following the rope).
+                _jumpBufferTimer = 0f;
+                _jumpCutRequested = false;
+                _jumpCutArmed = false;
+                _controlLockTimer = 0f;
+                _hasPlatformReference = false;
+                _platformVelocity = Vector2.zero;
+            }
+
+            IsBeingPulled = pulled;
+        }
+
+        /// <summary>
+        /// True while the rope owns the character: player input is ignored and gravity is
+        /// suspended. It stays false during the hook's flight, so firing the hook never
+        /// interrupts normal movement.
+        /// </summary>
+        public bool ControlLocked => IsBeingPulled;
 
         /// <summary>Injects the input source. Falls back to a component lookup when not set.</summary>
         public void SetInputSource(IInputSource source) => _input = source;
@@ -154,7 +173,6 @@ namespace TanLuZhe
         {
             _rb = GetComponent<Rigidbody2D>();
             _col = GetComponent<CapsuleCollider2D>();
-            _grapple = GetComponentInChildren<GrappleHook2D>();
             _health = GetComponent<PlayerHealth>();
 
             _minGroundDot = Mathf.Cos(_maxSlopeAngle * Mathf.Deg2Rad);
@@ -180,14 +198,20 @@ namespace TanLuZhe
                 _input = GetComponent<IInputSource>();
                 if (_input == null) _input = GetComponentInChildren<IInputSource>();
             }
-
-            // The grapple is usually created as a child after this component, so resolve it late.
-            if (_grapple == null) _grapple = GetComponentInChildren<GrappleHook2D>();
         }
 
         private void Update()
         {
             if (_input == null) return;
+
+            if (IsBeingPulled)
+            {
+                // While the rope owns the character every action key is inert: no jump buffering,
+                // no variable-jump cut, no turning. Anything pressed now is simply swallowed.
+                _jumpBufferTimer = 0f;
+                _jumpCutRequested = false;
+                return;
+            }
 
             if (_input.JumpDown) _jumpBufferTimer = _jumpBufferTime;
             if (!_input.JumpHeld && _jumpCutArmed && _rb.linearVelocity.y > 0f) _jumpCutRequested = true;
@@ -211,6 +235,21 @@ namespace TanLuZhe
             UpdateGroundState();
             UpdateWallState();
             UpdateTimers(dt);
+
+            if (IsBeingPulled)
+            {
+                // ---- rope takes over -------------------------------------------------------
+                // Gravity is suspended and the controller contributes nothing at all: no drive,
+                // no jump, no one-way drop, no fall clamp, no ground stick. The only thing that
+                // may change the velocity in this state is the grapple solver (which runs after
+                // this component). This is what "keep the inertia" means here: the momentum the
+                // player had when the hook bit is preserved, and the rope steers it.
+                _appliedGravity = 0f;
+                _isWallSliding = false;
+                _wasGrounded = _isGrounded;
+                return;
+            }
+
             UpdateMovingPlatform(dt);
 
             float inputX = _input != null ? _input.Horizontal : 0f;
@@ -396,13 +435,12 @@ namespace TanLuZhe
         }
 
         // ------------------------------------------------------------------ motion
+        /// <summary>
+        /// Player driven horizontal motion. Never called while the rope is attached: in that
+        /// state the controller is completely inert and only the grapple solver may move the body.
+        /// </summary>
         private void ApplyHorizontalMovement(float inputX, float dt)
         {
-            // While the rope is pulling and the player is not asking for anything, the rope owns
-            // the horizontal motion. Without this the controller's own braking (95 m/s^2 on the
-            // ground) would cancel a 140 m/s^2 pull and a grounded grapple would go nowhere.
-            if (IsBeingPulled && Mathf.Abs(inputX) < 0.01f) return;
-
             float vx = _rb.linearVelocity.x;
             float target = inputX * _maxRunSpeed;
 
@@ -433,8 +471,6 @@ namespace TanLuZhe
                 {
                     accel = _airAcceleration;
                 }
-
-                if (IsBeingPulled) accel *= _grappleAirControl;
             }
 
             float deltaV = Mathf.Clamp(target - vx, -accel * dt, accel * dt);
@@ -499,12 +535,6 @@ namespace TanLuZhe
             else
             {
                 gravity = _fallGravity;
-            }
-
-            if (_grapple != null && _grapple.IsAttachedToWall && vy < 0f && !_isGrounded)
-            {
-                // Slightly heavier while hanging on the rope: keeps pendulum swings tight.
-                gravity *= 1.1f;
             }
 
             _appliedGravity = gravity;

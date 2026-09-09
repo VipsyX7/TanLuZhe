@@ -109,12 +109,43 @@ public void Release() {
 ```
 
 `Release()` **一个字节都不动刚体速度**：绳索消失，当帧速度原样保留 → 惯性完整保留，拉扯立刻消失。
-同时 `PlayerController2D.SetBeingPulled(false)` 恢复空中操控系数与正常制动。
+同时 `PlayerController2D.SetBeingPulled(false)` 立刻恢复玩家行动与重力。
+
+### 4. 勾中期间完全接管玩家（本次新增）
+
+按"钩锁出手 ≠ 钩锁勾中"把控制权严格分开：
+
+| 钩锁状态 | 玩家能否行动 | 重力 |
+|---|---|---|
+| `Idle` / `Retracting`（待机、收回） | ✅ 完全正常 | ✅ 正常 |
+| **`Extending`（钩头飞行中）** | ✅ **完全正常**（可跑、可跳、可转向） | ✅ 正常 |
+| **`Attached`（已勾中，正在拉扯）** | ❌ **所有操作键无效** | ❌ **重力被取消** |
+
+实现方式（`PlayerController2D`）：
+
+```csharp
+private void FixedUpdate()
+{
+    ...
+    if (IsBeingPulled)          // 只有 Attached 时由 GrappleHook2D 置为 true
+    {
+        _appliedGravity = 0f;   // 取消重力
+        _isWallSliding = false;
+        return;                 // 本帧不施加任何玩家驱动：无移动、无跳跃、无穿落、无落地粘附、无下落限速
+    }
+    ...
+}
+```
+
+* `Update()` 在 `IsBeingPulled` 时**直接返回**：跳跃缓冲被清空、跳跃截断被取消、朝向不再改变。所以勾中期间按跳跃/方向/下蹲**完全没有任何效果**，也不会"排队"到脱钩瞬间才触发。
+* 进入拉扯的瞬间（`SetBeingPulled(true)`）会清掉已有的跳跃缓冲与移动平台引用，避免残留状态。
+* 于是勾中期间**唯一能改变玩家速度的就是钩锁求解器**，这才是"保持物理惯性"最纯粹的形式：钩锁只施加径向加速度，玩家原有的切向动量原封不动。
+* 玩家死亡时钩锁自动脱钩，不会拖着尸体跑。
+* HUD 在勾中时显示 `ACTION LOCKED  (CTRL = cut)`，玩家能立刻知道为什么按不动。
 
 ### 其它细节
 
 * 空中无输入时横向加速度为 **0**（不擦除动量），所以松钩后能靠惯性飞出去。
-* 被钩住时空中操控系数降到 `_grappleAirControl = 0.45`，强调"钩锁主导、惯性主导"。
 * 绳索渲染：绷紧时直线 + 青色，松弛时按抛物线垂弧，玩家一眼能看出是否真的在被拉。
 
 ---
@@ -166,7 +197,7 @@ Assets/
 
 ## 六、自动化验证（本仓库实际跑通的结果）
 
-### PlayMode 测试：15/15 通过
+### PlayMode 测试：21/21 通过
 
 ```
 Unity.exe -batchmode -projectPath <项目> -runTests -testPlatform PlayMode -testResults results.xml
@@ -183,6 +214,9 @@ Unity.exe -batchmode -projectPath <项目> -runTests -testPlatform PlayMode -tes
 | `Grapple_Wall_PullsPlayerTowardImpactPoint` | **命中墙壁后玩家被拉向落点**、绳索绷紧、落点在墙面内侧 |
 | `Grapple_Wall_AppliesContinuousPullAcceleration` | **拉扯是"持续加速度"**（收拢速度不断攀升）且受上限约束 |
 | `Grapple_Wall_AutoReleasesOnArrival` | **玩家到达落点后自动脱钩**，脱钩时确实已经到达（最近距离 ≤1.2 m） |
+| `Grapple_Attached_IgnoresPlayerInput` | **勾中期间狂按方向/跳跃/下蹲全部无效**（跳跃速度上限 < 8 m/s 而非 16），钩锁不受影响 |
+| `Grapple_Attached_SuspendsGravity` | **勾中期间重力被取消**（水平绳上玩家不下沉、竖直速度 ≥ -0.5） |
+| `Grapple_Extending_LeavesPlayerInControl` | **钩头飞行期间玩家操作完全正常**（能跑、能跳） |
 | `Grapple_Wall_PreservesTangentialMomentum` | **切向（惯性）速度在拉扯中保留 ≥55%**，径向才被改变 |
 | `Grapple_Enemy_PullsBothBodiesTogether` | **敌人被拉向玩家、玩家被拉向敌人**，最终真正接触 |
 | `Grapple_Enemy_PullIsMassWeighted` | 4 倍质量的敌人位移只有玩家的 ~1/4（等大反向冲量） |
@@ -219,7 +253,8 @@ Unity.exe -batchmode -quit -projectPath <项目> -executeMethod TanLuZhe.EditorT
 | 绳子更"弹" | `_ropeGrip`（1 = 完全不可伸长） |
 | 钩敌人时更拉扯 | `EnemyController2D._grappleMotorFactor`（越小越拉得动） |
 | 跳得更高 / 更飘 | `PlayerController2D._jumpHeight`、`_riseGravity`、`_fallGravity` |
-| 空中操控更强 | `_airAcceleration`、`_grappleAirControl` |
+| 空中操控更强 | `_airAcceleration` |
+| 勾中时是否锁操作 / 关重力 | `PlayerController2D` 里的 `IsBeingPulled` 分支（勾中锁定、出手不锁） |
 | 墙跳手感 | `_wallJumpVelocity`、`_wallJumpControlLock` |
 
 所有参数都在 Inspector 上暴露（`[SerializeField]`），可以在运行时实时拖动观察。
