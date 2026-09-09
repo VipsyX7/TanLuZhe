@@ -11,27 +11,38 @@ namespace TanLuZhe
     public sealed class EnemyController2D : MonoBehaviour, IDamageable, IGrappleTarget
     {
         [Header("Health")]
-        [SerializeField] private float _maxHealth = 45f;
-        [SerializeField] private float _stompBounce = 13f;
+        [Tooltip("Hit points. The hook deals damage on latch, a stomp deals 30.")]
+        [Range(5f, 500f)] [SerializeField] private float _maxHealth = 45f;
+        [Tooltip("Upward speed the player gets from stomping this enemy.")]
+        [Range(0f, 30f)] [SerializeField] private float _stompBounce = 13f;
 
         [Header("Movement")]
-        [SerializeField] private float _patrolSpeed = 3f;
-        [SerializeField] private float _chaseSpeed = 4.8f;
-        [SerializeField] private float _acceleration = 34f;
-        [SerializeField] private float _aggroRadius = 9f;
-        [SerializeField] private float _aggroHeight = 3.5f;
+        [Tooltip("Walking speed while patrolling (m/s).")]
+        [Range(0f, 20f)] [SerializeField] private float _patrolSpeed = 3f;
+        [Tooltip("Walking speed while chasing the player (m/s).")]
+        [Range(0f, 25f)] [SerializeField] private float _chaseSpeed = 4.8f;
+        [Tooltip("How quickly the enemy reaches its target speed (m/s^2).")]
+        [Range(1f, 200f)] [SerializeField] private float _acceleration = 34f;
+        [Tooltip("Horizontal distance at which the enemy starts chasing.")]
+        [Range(0f, 40f)] [SerializeField] private float _aggroRadius = 9f;
+        [Tooltip("Vertical distance at which the enemy stops caring about the player.")]
+        [Range(0f, 30f)] [SerializeField] private float _aggroHeight = 3.5f;
         [SerializeField] private LayerMask _groundMask = ~0;
-        [SerializeField] private float _ledgeProbeDistance = 0.6f;
-        [SerializeField] private float _wallProbeDistance = 0.35f;
+        [Tooltip("How far ahead the enemy looks for a ledge before turning around.")]
+        [Range(0.05f, 3f)] [SerializeField] private float _ledgeProbeDistance = 0.6f;
+        [Tooltip("How far ahead the enemy looks for a wall before turning around.")]
+        [Range(0.05f, 3f)] [SerializeField] private float _wallProbeDistance = 0.35f;
 
         [Header("Combat")]
-        [SerializeField] private float _touchDamage = 18f;
+        [Tooltip("Damage dealt by touching the player (unless the player is stomping).")]
+        [Range(0f, 100f)] [SerializeField] private float _touchDamage = 18f;
         [SerializeField] private Vector2 _touchKnockback = new Vector2(9f, 10f);
 
         [Header("Grapple")]
         [Tooltip("Motor authority kept while a rope is attached. Lower = the hook wins the tug of war.")]
         [Range(0f, 1f)] [SerializeField] private float _grappleMotorFactor = 0.3f;
-        [SerializeField] private float _grappleStagger = 0.4f;
+        [Tooltip("Stagger time right after the hook latches on.")]
+        [Range(0f, 2f)] [SerializeField] private float _grappleStagger = 0.4f;
 
         [Header("Visuals")]
         [SerializeField] private SpriteRenderer _visual;

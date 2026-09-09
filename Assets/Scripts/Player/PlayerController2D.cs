@@ -27,47 +27,65 @@ namespace TanLuZhe
     {
         // ------------------------------------------------------------------ run
         [Header("Run")]
-        [SerializeField] private float _maxRunSpeed = 8.5f;
-        [SerializeField] private float _groundAcceleration = 75f;
-        [SerializeField] private float _groundDeceleration = 95f;
-        [SerializeField] private float _airAcceleration = 48f;
-        [SerializeField] private float _airDeceleration = 26f;
-        [SerializeField] private float _turnAroundBoost = 1.8f;
+        [Tooltip("Top running speed (m/s).")]
+        [Range(1f, 25f)] [SerializeField] private float _maxRunSpeed = 8.5f;
+        [Tooltip("How quickly the player reaches top speed on the ground (m/s^2).")]
+        [Range(10f, 300f)] [SerializeField] private float _groundAcceleration = 75f;
+        [Tooltip("How quickly the player stops on the ground (m/s^2).")]
+        [Range(10f, 300f)] [SerializeField] private float _groundDeceleration = 95f;
+        [Tooltip("Air steering strength (m/s^2). Only used when a direction is held.")]
+        [Range(0f, 200f)] [SerializeField] private float _airAcceleration = 48f;
+        [Tooltip("How hard the player brakes in the air when holding against the current motion.")]
+        [Range(0f, 200f)] [SerializeField] private float _airDeceleration = 26f;
+        [Tooltip("Extra acceleration when reversing direction.")]
+        [Range(1f, 4f)] [SerializeField] private float _turnAroundBoost = 1.8f;
         [Tooltip("Air control multiplier applied while the grapple rope is pulling the player. " +
                  "Lower = more inertia, less ability to fight the rope.")]
-        [SerializeField] private float _grappleAirControl = 0.45f;
+        [Range(0f, 1f)] [SerializeField] private float _grappleAirControl = 0.45f;
 
         // ----------------------------------------------------------------- jump
         [Header("Jump")]
-        [SerializeField] private float _jumpHeight = 3.1f;
+        [Tooltip("Peak jump height in world units.")]
+        [Range(0.5f, 10f)] [SerializeField] private float _jumpHeight = 3.1f;
         [Tooltip("Upward acceleration while rising (m/s^2). Higher = snappier, shorter arc.")]
-        [SerializeField] private float _riseGravity = 42f;
+        [Range(10f, 150f)] [SerializeField] private float _riseGravity = 42f;
         [Tooltip("Downward acceleration while falling (m/s^2).")]
-        [SerializeField] private float _fallGravity = 74f;
+        [Range(10f, 200f)] [SerializeField] private float _fallGravity = 74f;
         [Tooltip("Downward acceleration while hanging near the apex (m/s^2).")]
-        [SerializeField] private float _apexGravity = 26f;
-        [SerializeField] private float _apexVelocityWindow = 2.4f;
+        [Range(5f, 120f)] [SerializeField] private float _apexGravity = 26f;
+        [Tooltip("Vertical speed window around the apex that uses the apex gravity.")]
+        [Range(0.1f, 10f)] [SerializeField] private float _apexVelocityWindow = 2.4f;
         [Tooltip("Extra gravity multiplier applied after the jump key is released early.")]
-        [SerializeField] private float _jumpCutGravity = 2.8f;
-        [SerializeField] private float _maxFallSpeed = 24f;
-        [SerializeField] private float _coyoteTime = 0.1f;
-        [SerializeField] private float _jumpBufferTime = 0.12f;
+        [Range(1f, 6f)] [SerializeField] private float _jumpCutGravity = 2.8f;
+        [Tooltip("Terminal falling speed (m/s).")]
+        [Range(5f, 60f)] [SerializeField] private float _maxFallSpeed = 24f;
+        [Tooltip("Grace period after walking off a ledge during which a jump still works.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _coyoteTime = 0.1f;
+        [Tooltip("How early a jump press is remembered before landing.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _jumpBufferTime = 0.12f;
         [Tooltip("Downward force applied while grounded so the capsule stays glued to slopes.")]
-        [SerializeField] private float _groundStickForce = 18f;
+        [Range(0f, 100f)] [SerializeField] private float _groundStickForce = 18f;
 
         // ----------------------------------------------------------------- wall
         [Header("Wall")]
-        [SerializeField] private float _maxSlopeAngle = 50f;
-        [SerializeField] private float _wallSlideSpeed = 4.5f;
+        [Tooltip("Steepest surface that still counts as walkable ground (degrees).")]
+        [Range(0f, 89f)] [SerializeField] private float _maxSlopeAngle = 50f;
+        [Tooltip("Fall speed cap while sliding down a wall (m/s).")]
+        [Range(0.5f, 20f)] [SerializeField] private float _wallSlideSpeed = 4.5f;
+        [Tooltip("Wall jump impulse: x = push away from the wall, y = upward speed.")]
         [SerializeField] private Vector2 _wallJumpVelocity = new Vector2(11f, 15.5f);
-        [SerializeField] private float _wallJumpControlLock = 0.18f;
-        [SerializeField] private float _wallCoyoteTime = 0.1f;
-        [SerializeField] private float _wallJumpSameWallLock = 0.12f;
+        [Tooltip("Time after a wall jump during which steering input is ignored.")]
+        [Range(0f, 1f)] [SerializeField] private float _wallJumpControlLock = 0.18f;
+        [Tooltip("Grace period after leaving a wall during which a wall jump still works.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _wallCoyoteTime = 0.1f;
+        [Tooltip("Cooldown before the same wall can be jumped off again.")]
+        [Range(0f, 1f)] [SerializeField] private float _wallJumpSameWallLock = 0.12f;
 
         // ----------------------------------------------------------------- misc
         [Header("World interaction")]
         [SerializeField] private LayerMask _groundMask = ~0;
-        [SerializeField] private float _dropThroughTime = 0.35f;
+        [Tooltip("How long collisions with a one-way platform are ignored after pressing down + jump.")]
+        [Range(0.05f, 1f)] [SerializeField] private float _dropThroughTime = 0.35f;
 
         private Rigidbody2D _rb;
         private CapsuleCollider2D _col;

@@ -39,35 +39,41 @@ namespace TanLuZhe
 
         [Header("Launch")]
         [SerializeField] private LayerMask _hitMask = ~0;
-        [SerializeField] private float _hookSpeed = 48f;
-        [SerializeField] private float _maxRange = 16f;
-        [SerializeField] private float _hookRadius = 0.08f;
-        [SerializeField] private float _retractSpeed = 70f;
+        [Tooltip("How fast the hook head flies out toward the cursor (m/s).")]
+        [Range(10f, 120f)] [SerializeField] private float _hookSpeed = 48f;
+        [Tooltip("Maximum reach of the hook (world units).")]
+        [Range(2f, 40f)] [SerializeField] private float _maxRange = 16f;
+        [Tooltip("Thickness of the hook's sweep test; a bigger value cannot slip through corners.")]
+        [Range(0.01f, 0.5f)] [SerializeField] private float _hookRadius = 0.08f;
+        [Tooltip("How fast a released / missed hook flies back to the player (m/s).")]
+        [Range(10f, 200f)] [SerializeField] private float _retractSpeed = 70f;
 
         [Header("Pull")]
         [Tooltip("Constant acceleration applied to the player toward the hook's landing point (m/s^2). " +
                  "Applied every physics step while hooked, so the pull builds speed instead of snapping. " +
                  "Must comfortably exceed gravity or a grounded player cannot be lifted.")]
-        [SerializeField] private float _pullAcceleration = 140f;
+        [Range(20f, 400f)] [SerializeField] private float _pullAcceleration = 140f;
         [Tooltip("Speed cap for the pull so the player cannot accelerate forever.")]
-        [SerializeField] private float _maxPullSpeed = 30f;
+        [Range(5f, 60f)] [SerializeField] private float _maxPullSpeed = 30f;
         [Tooltip("The hook detaches automatically once the player gets this close to the landing point.")]
-        [SerializeField] private float _releaseDistance = 1f;
+        [Range(0.1f, 4f)] [SerializeField] private float _releaseDistance = 1f;
         [Tooltip("1 = inextensible rope (outward velocity fully cancelled). <1 = stretchy rope.")]
         [Range(0f, 1f)] [SerializeField] private float _ropeGrip = 1f;
         [Tooltip("Position error correction, in 1/s. Keeps the rope taut when a frame overshoots.")]
-        [SerializeField] private float _positionCorrection = 8f;
+        [Range(0f, 40f)] [SerializeField] private float _positionCorrection = 8f;
         [Tooltip("Rope snaps if stretched beyond this multiple of its rest length.")]
-        [SerializeField] private float _breakStretch = 2.2f;
+        [Range(1f, 5f)] [SerializeField] private float _breakStretch = 2.2f;
 
         [Header("Enemy hook")]
         [Tooltip("While hooked onto an enemy the head is pinned onto it; the rope lets go as soon as the " +
                  "player's body touches that enemy.")]
-        [SerializeField] private float _contactReleaseDistance = 0.08f;
+        [Range(0f, 1f)] [SerializeField] private float _contactReleaseDistance = 0.08f;
 
         [Header("Combat")]
-        [SerializeField] private float _attachDamage = 14f;
-        [SerializeField] private float _enemyHitKnockback = 4f;
+        [Tooltip("Damage dealt the instant the hook latches onto an enemy.")]
+        [Range(0f, 100f)] [SerializeField] private float _attachDamage = 14f;
+        [Tooltip("Knockback applied to the enemy at the moment of the hook impact.")]
+        [Range(0f, 30f)] [SerializeField] private float _enemyHitKnockback = 4f;
 
         [Header("Debug")]
         [SerializeField] private bool _drawDebug;
@@ -115,6 +121,11 @@ namespace TanLuZhe
 
         /// <summary>How fast the player is currently being pulled toward the anchor (m/s).</summary>
         public float CurrentPullSpeed => _currentPullSpeed;
+
+        /// <summary>Read-only mirrors of the tuning values, for the inspector readout.</summary>
+        public float PullAcceleration => _pullAcceleration;
+        public float MaxPullSpeed => _maxPullSpeed;
+        public float ReleaseDistance => _releaseDistance;
 
         public float MaxRange => _maxRange;
         public IGrappleTarget AnchorTarget => _anchorTarget;

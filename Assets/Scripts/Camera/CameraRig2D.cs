@@ -14,11 +14,16 @@ namespace TanLuZhe
         [SerializeField] private Vector2 _offset = new Vector2(0f, 1.3f);
 
         [Header("Follow")]
-        [SerializeField] private float _smoothTime = 0.16f;
+        [Tooltip("Approximate time for the camera to catch up. 0 = locked to the target.")]
+        [Range(0f, 1f)] [SerializeField] private float _smoothTime = 0.16f;
+        [Tooltip("Rectangle around the focus point where the camera does not move at all.")]
         [SerializeField] private Vector2 _deadZone = new Vector2(1.1f, 0.9f);
+        [Tooltip("How far the camera leads the player based on velocity.")]
         [SerializeField] private Vector2 _lookAhead = new Vector2(3.2f, 1.4f);
-        [SerializeField] private float _lookAheadSmooth = 0.4f;
-        [SerializeField] private float _maxLookAheadSpeed = 12f;
+        [Tooltip("Smoothing applied to the look-ahead offset.")]
+        [Range(0.01f, 2f)] [SerializeField] private float _lookAheadSmooth = 0.4f;
+        [Tooltip("Player speed that produces the full look-ahead offset.")]
+        [Range(1f, 40f)] [SerializeField] private float _maxLookAheadSpeed = 12f;
 
         [Header("Bounds")]
         [SerializeField] private bool _useBounds;
