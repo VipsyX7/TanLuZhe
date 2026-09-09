@@ -6946,7 +6946,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 54
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -15488,6 +15488,7 @@ MonoBehaviour:
   _sparkSprite: {fileID: 21300000, guid: 7a56b38f387394c4a9c85e9124beae3e, type: 3}
   _dustSprite: {fileID: 21300000, guid: 55237afa916280e4f87ebea61c7fdfc9, type: 3}
   _slashSprite: {fileID: 21300000, guid: c16eaf727007fef4ea1e783b32b5e315, type: 3}
+  _slashAngleOffset: 180
   _poolSize: 220
   _sortingLayerName: Default
 --- !u!114 &1947183991
@@ -16169,12 +16170,12 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 3328
   _hookSpeed: 48
-  _maxRange: 16
+  _maxRange: 10
   _hookRadius: 0.08
   _retractSpeed: 70
-  _pullAcceleration: 140
+  _pullAcceleration: 100
   _maxPullSpeed: 30
-  _releaseDistance: 1
+  _releaseDistance: 2
   _ropeGrip: 1
   _positionCorrection: 9
   _breakStretch: 2.2
