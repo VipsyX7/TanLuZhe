@@ -101,6 +101,43 @@ namespace TanLuZhe.EditorTools
                 if (rope != null) Check(GetRef(rope, "_material") != null, "Rope material assigned");
             }
 
+            // ---- weapons
+            PlayerWeapons weapons = Object.FindFirstObjectByType<PlayerWeapons>();
+            Check(weapons != null, "Player weapons component exists");
+            if (weapons != null)
+            {
+                Check(GetRef(weapons, "_handOrigin") != null, "Weapon hand origin assigned");
+                Check(GetRef(weapons, "_handVisual") != null, "Weapon hand visual assigned");
+                Check(GetInt(weapons, "_hitMask") != 0, "Weapon hit mask configured");
+                Check(GetRef(weapons, "_startingMainHand") != null, "Starting main hand weapon assigned");
+                Check(GetRef(weapons, "_startingOffHand") != null, "Starting off hand weapon assigned");
+            }
+
+            WeaponHandVisual handVisual = Object.FindFirstObjectByType<WeaponHandVisual>();
+            Check(handVisual != null, "Weapon hand visual exists");
+            if (handVisual != null)
+            {
+                Check(GetRef(handVisual, "_mainRenderer") != null, "Main hand renderer assigned");
+                Check(GetRef(handVisual, "_offRenderer") != null, "Off hand renderer assigned");
+            }
+
+            WeaponInventoryUI inventory = Object.FindFirstObjectByType<WeaponInventoryUI>();
+            Check(inventory != null, "Weapon inventory UI exists");
+            if (inventory != null)
+            {
+                Check(GetRef(inventory, "_weapons") != null, "Inventory UI is wired to the player weapons");
+                Check(GetRef(inventory, "_font") != null, "Inventory UI has a font");
+            }
+
+            WeaponPickup2D[] pickups = Object.FindObjectsByType<WeaponPickup2D>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Check(pickups.Length >= 3, $"Weapon pickups placed in the level ({pickups.Length})");
+            int wiredPickups = 0;
+            for (int i = 0; i < pickups.Length; i++)
+            {
+                if (GetRef(pickups[i], "_weapon") != null) wiredPickups++;
+            }
+            Check(pickups.Length > 0 && wiredPickups == pickups.Length, "Every weapon pickup has a weapon asset");
+
             // ---- level content
             Check(Count<EnemyController2D>() >= 4, $"Enemies present ({Count<EnemyController2D>()})");
             Check(Count<Collectible2D>() >= 15, $"Coins present ({Count<Collectible2D>()})");
@@ -145,6 +182,8 @@ namespace TanLuZhe.EditorTools
                 Check(GetRef(hud, "_scoreText") != null, "HUD score text assigned");
                 Check(GetRef(hud, "_hintText") != null, "HUD control hints assigned");
                 Check(GetRef(hud, "_grappleText") != null, "HUD grapple readout assigned");
+                Check(GetRef(hud, "_weaponText") != null, "HUD weapon readout assigned");
+                Check(GetRef(hud, "_pickupText") != null, "HUD pickup prompt assigned");
                 Check(GetRef(hud, "_winPanel") != null, "HUD win panel assigned");
             }
 

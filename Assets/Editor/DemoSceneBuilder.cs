@@ -289,6 +289,7 @@ namespace TanLuZhe.EditorTools
             FxManager fx = services.AddComponent<FxManager>();
             SetField(fx, "_sparkSprite", S("spark"));
             SetField(fx, "_dustSprite", S("dust"));
+            SetField(fx, "_slashSprite", S("slash"));
             SetField(fx, "_poolSize", 220);
 
             // ---- parallax background
@@ -344,6 +345,7 @@ namespace TanLuZhe.EditorTools
             public PlayerController2D Controller;
             public PlayerHealth Health;
             public GrappleHook2D Grapple;
+            public PlayerWeapons Weapons;
             public SpriteRenderer Visual;
         }
 
@@ -413,6 +415,35 @@ namespace TanLuZhe.EditorTools
             SetField(grapple, "_positionCorrection", 9f);
             SetField(grapple, "_attachDamage", 16f);
             SetField(grapple, "_drawDebug", false);
+
+            // ---- weapons
+            GameObject handPivot = new GameObject("HandPivot");
+            handPivot.transform.SetParent(root.transform, false);
+            handPivot.transform.localPosition = new Vector3(0f, 0.2f, 0f);
+
+            GameObject mainHand = new GameObject("Main Hand");
+            mainHand.transform.SetParent(root.transform, false);
+            SpriteRenderer mainRenderer = AddSprite(mainHand, "white", new Vector2(1f, 1f), OrderActor + 2);
+
+            GameObject offHand = new GameObject("Off Hand");
+            offHand.transform.SetParent(root.transform, false);
+            SpriteRenderer offRenderer = AddSprite(offHand, "white", new Vector2(1f, 1f), OrderActor + 1);
+
+            WeaponHandVisual handVisual = root.AddComponent<WeaponHandVisual>();
+            SetField(handVisual, "_mainRenderer", mainRenderer);
+            SetField(handVisual, "_offRenderer", offRenderer);
+            SetField(handVisual, "_sortingOrder", OrderActor + 1);
+            SetField(handVisual, "_swingArc", 130f);
+            SetField(handVisual, "_swingTime", 0.16f);
+
+            PlayerWeapons weapons = root.AddComponent<PlayerWeapons>();
+            parts.Weapons = weapons;
+            SetField(weapons, "_handOrigin", handPivot.transform);
+            SetField(weapons, "_handVisual", handVisual);
+            SetField(weapons, "_hitMask", 1 << GameLayers.Enemy);
+            SetField(weapons, "_backpackCapacity", 8);
+            SetField(weapons, "_startingMainHand", WeaponLibraryGenerator.Load("Sword"));
+            SetField(weapons, "_startingOffHand", WeaponLibraryGenerator.Load("Bow"));
 
             return parts;
         }
@@ -512,6 +543,12 @@ namespace TanLuZhe.EditorTools
             CreateCheckpoint(new Vector2(60f, 1f));
             CreateCheckpoint(new Vector2(92f, 1f));
 
+            // ---------------------------------------------------------- weapon pickups
+            CreateWeaponPickup(new Vector2(14f, 1.2f), "Spear");
+            CreateWeaponPickup(new Vector2(33f, 1.2f), "Hammer");
+            CreateWeaponPickup(new Vector2(66f, 1.2f), "Wand");
+            CreateWeaponPickup(new Vector2(96f, 1.2f), "Sword");
+
             // ---------------------------------------------------------- goal
             GameObject goal = NewObject("Level Goal", new Vector2(104f, 2.2f), 0);
             AddSprite(goal, "goal", new Vector2(1f, 1f), OrderActor);
@@ -570,6 +607,29 @@ namespace TanLuZhe.EditorTools
             SetField(checkpoint, "_respawnOffset", new Vector2(0f, 1.2f));
         }
 
+        private static void CreateWeaponPickup(Vector2 position, string weaponName)
+        {
+            WeaponDefinition weapon = WeaponLibraryGenerator.Load(weaponName);
+            if (weapon == null)
+            {
+                Debug.LogWarning($"[TanLuZhe] Weapon '{weaponName}' not found, skipping pickup.");
+                return;
+            }
+
+            GameObject go = NewObject($"Weapon Pickup ({weaponName})", position, GameLayers.Collectible);
+            SpriteRenderer sr = AddSprite(go, "white", new Vector2(1f, 1f), OrderActor + 3);
+            sr.sprite = weapon.icon != null ? weapon.icon : weapon.worldSprite;
+            sr.color = weapon.tint;
+
+            CircleCollider2D collider = go.AddComponent<CircleCollider2D>();
+            collider.radius = 0.85f;
+            collider.isTrigger = true;
+
+            WeaponPickup2D pickup = go.AddComponent<WeaponPickup2D>();
+            SetField(pickup, "_weapon", weapon);
+            SetField(pickup, "_renderer", sr);
+        }
+
         // ==================================================================== hud
         private static void BuildHud(PlayerParts player)
         {
@@ -615,6 +675,19 @@ namespace TanLuZhe.EditorTools
                 new Vector2(40f, 44f), new Vector2(900f, 150f), TextAnchor.LowerLeft, 22,
                 new Color(0.8f, 0.85f, 1f, 0.9f), new Vector2(0f, 0f));
 
+            Text weaponText = MakeText(canvasGO.transform, "Weapon Text", "MAIN [LMB]  Sword      OFF [RMB]  Bow",
+                new Vector2(40f, -164f), new Vector2(1000f, 34f), TextAnchor.MiddleLeft, 24,
+                new Color(1f, 0.92f, 0.7f), new Vector2(0f, 1f));
+
+            Text pickupText = MakeText(canvasGO.transform, "Pickup Prompt", string.Empty,
+                new Vector2(0f, -150f), new Vector2(900f, 44f), TextAnchor.MiddleCenter, 30,
+                new Color(1f, 1f, 0.6f), new Vector2(0.5f, 0f));
+            RectTransform pickupRect = pickupText.rectTransform;
+            pickupRect.anchorMin = new Vector2(0.5f, 0.5f);
+            pickupRect.anchorMax = new Vector2(0.5f, 0.5f);
+            pickupRect.pivot = new Vector2(0.5f, 0.5f);
+            pickupRect.anchoredPosition = new Vector2(0f, -220f);
+
             // win banner
             GameObject winPanel = new GameObject("Win Panel");
             winPanel.transform.SetParent(canvasGO.transform, false);
@@ -632,11 +705,20 @@ namespace TanLuZhe.EditorTools
             winTextRect.anchoredPosition = Vector2.zero;
             winPanel.SetActive(false);
 
+            // backpack UI (builds its own panel at runtime)
+            WeaponInventoryUI inventory = canvasGO.AddComponent<WeaponInventoryUI>();
+            SetField(inventory, "_weapons", player.Weapons);
+            SetField(inventory, "_panelSprite", S("white"));
+            SetField(inventory, "_slotSprite", S("white"));
+            SetField(inventory, "_font", _font);
+
             SetField(hud, "_healthFill", barFill);
             SetField(hud, "_healthText", healthText);
             SetField(hud, "_scoreText", scoreText);
             SetField(hud, "_grappleText", grappleText);
             SetField(hud, "_hintText", hintText);
+            SetField(hud, "_weaponText", weaponText);
+            SetField(hud, "_pickupText", pickupText);
             SetField(hud, "_winPanel", winPanel);
             SetField(hud, "_winText", winText);
         }

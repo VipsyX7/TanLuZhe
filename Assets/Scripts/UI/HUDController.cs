@@ -21,6 +21,10 @@ namespace TanLuZhe
         [SerializeField] private Text _hintText;
         [SerializeField] private Text _grappleText;
 
+        [Header("Weapons")]
+        [SerializeField] private Text _weaponText;
+        [SerializeField] private Text _pickupText;
+
         [Header("Banner")]
         [SerializeField] private GameObject _winPanel;
         [SerializeField] private Text _winText;
@@ -32,12 +36,14 @@ namespace TanLuZhe
         private GameManager _game;
         private PlayerHealth _player;
         private GrappleHook2D _grapple;
+        private PlayerWeapons _weapons;
 
         private void Start()
         {
             _game = GameManager.Instance;
             _player = FindFirstObjectByType<PlayerHealth>();
             _grapple = FindFirstObjectByType<GrappleHook2D>();
+            _weapons = FindFirstObjectByType<PlayerWeapons>();
 
             if (_game != null)
             {
@@ -45,17 +51,19 @@ namespace TanLuZhe
                 _game.Won += OnWon;
             }
             if (_player != null) _player.HealthChanged += OnHealthChanged;
+            if (_weapons != null) _weapons.LoadoutChanged += RefreshWeapons;
 
             if (_hintText != null)
             {
                 _hintText.text = "A / D  move      SPACE  jump (hold = higher)\n" +
-                                 "E  fire grapple at cursor\n" +
-                                 "LEFT CTRL  cut the rope (keeps your momentum)\n" +
-                                 "S + SPACE  drop through one-way platforms      R  restart";
+                                 "E  fire grapple at cursor      LEFT CTRL  cut the rope\n" +
+                                 "LEFT MOUSE  main hand attack      RIGHT MOUSE  off hand attack\n" +
+                                 "F  pick up weapon      B  backpack      S + SPACE  drop through      R  restart";
             }
 
             if (_winPanel != null) _winPanel.SetActive(false);
             RefreshScore();
+            RefreshWeapons();
             if (_player != null) OnHealthChanged(_player.Health, _player.MaxHealth);
         }
 
@@ -67,6 +75,16 @@ namespace TanLuZhe
                 _game.Won -= OnWon;
             }
             if (_player != null) _player.HealthChanged -= OnHealthChanged;
+            if (_weapons != null) _weapons.LoadoutChanged -= RefreshWeapons;
+        }
+
+        private void RefreshWeapons()
+        {
+            if (_weaponText == null || _weapons == null) return;
+
+            string main = _weapons.MainHand != null ? _weapons.MainHand.displayName : "empty";
+            string off = _weapons.OffHand != null ? _weapons.OffHand.displayName : "empty";
+            _weaponText.text = $"MAIN [LMB]  {main}      OFF [RMB]  {off}      BAG {_weapons.Backpack.Count}/{_weapons.Capacity}  [B]";
         }
 
         private void Update()
@@ -95,6 +113,14 @@ namespace TanLuZhe
             else
             {
                 _grappleText.text = $"HOOK {state}";
+            }
+
+            if (_pickupText != null)
+            {
+                WeaponPickup2D pickup = _weapons != null ? _weapons.NearbyPickup : null;
+                _pickupText.text = pickup != null && pickup.HasWeapon
+                    ? $"F   pick up  {pickup.Weapon.displayName.ToUpperInvariant()}"
+                    : string.Empty;
             }
         }
 

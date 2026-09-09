@@ -18,13 +18,34 @@ namespace TanLuZhe.Tests
 
         private sealed class ScriptedInputSource : IInputSource
         {
+            // Edge flags self-clear on the first read so a press is consumed exactly once.
+            private bool _jumpDown;
+            private bool _grappleDown;
+            private bool _interactDown;
+            private bool _inventoryDown;
+            private bool _attackMainDown;
+            private bool _attackOffDown;
+
             public float Horizontal { get; set; }
-            public bool JumpDown { get; set; }
+            public bool JumpDown { get => Consume(ref _jumpDown); set => _jumpDown = value; }
             public bool JumpHeld { get; set; }
-            public bool GrappleDown { get; set; }
+            public bool GrappleDown { get => Consume(ref _grappleDown); set => _grappleDown = value; }
             public bool ReleaseHeld { get; set; }
             public bool DownHeld { get; set; }
+            public bool InteractDown { get => Consume(ref _interactDown); set => _interactDown = value; }
+            public bool InventoryDown { get => Consume(ref _inventoryDown); set => _inventoryDown = value; }
+            public bool AttackMainDown { get => Consume(ref _attackMainDown); set => _attackMainDown = value; }
+            public bool AttackMainHeld { get; set; }
+            public bool AttackOffDown { get => Consume(ref _attackOffDown); set => _attackOffDown = value; }
+            public bool AttackOffHeld { get; set; }
             public Vector2 PointerScreen { get; set; } = new Vector2(1600f, 700f);
+
+            private static bool Consume(ref bool flag)
+            {
+                if (!flag) return false;
+                flag = false;
+                return true;
+            }
         }
 
         private static IEnumerator StepFixed(int steps)

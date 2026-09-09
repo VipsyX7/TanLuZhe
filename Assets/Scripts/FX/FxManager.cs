@@ -26,6 +26,7 @@ namespace TanLuZhe
 
         [SerializeField] private Sprite _sparkSprite;
         [SerializeField] private Sprite _dustSprite;
+        [SerializeField] private Sprite _slashSprite;
         [SerializeField] private int _poolSize = 160;
         [SerializeField] private string _sortingLayerName = "Default";
 
@@ -171,6 +172,18 @@ namespace TanLuZhe
         public static void Burst(Vector2 position, int count, Color color, float speed = 6f)
         {
             Sparks(position, count, speed, color);
+        }
+
+        /// <summary>One-shot slash arc, rotated to match an attack direction.</summary>
+        public static void Slash(Vector2 position, Vector2 direction, float size = 1.6f, float life = 0.14f)
+        {
+            FxManager fx = Instance;
+            if (fx == null) return;
+
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            Particle p = fx.Emit(fx._slashSprite, position, Vector2.zero, life, size,
+                new Color(0.8f, 0.95f, 1f, 0.9f), 0f, 0f, 0f);
+            if (p.Transform != null) p.Transform.rotation = Quaternion.Euler(0f, 0f, angle);
         }
 
         /// <summary>Deterministic seeding for tests.</summary>

@@ -28,6 +28,8 @@ namespace TanLuZhe
         [SerializeField] private Key _grappleKey = Key.E;
         [SerializeField] private Key _releaseKey = Key.LeftCtrl;
         [SerializeField] private Key _downKey = Key.S;
+        [SerializeField] private Key _interactKey = Key.F;
+        [SerializeField] private Key _inventoryKey = Key.B;
 
         private bool _jumpDown;
         private bool _grappleDown;
@@ -40,6 +42,12 @@ namespace TanLuZhe
         public bool GrappleDown => _grappleDown;
         public bool ReleaseHeld { get; private set; }
         public bool DownHeld { get; private set; }
+        public bool InteractDown { get; private set; }
+        public bool InventoryDown { get; private set; }
+        public bool AttackMainDown { get; private set; }
+        public bool AttackMainHeld { get; private set; }
+        public bool AttackOffDown { get; private set; }
+        public bool AttackOffHeld { get; private set; }
         public Vector2 PointerScreen { get; private set; }
 
         private void Update()
@@ -47,7 +55,21 @@ namespace TanLuZhe
             Keyboard keyboard = Keyboard.current;
             Mouse mouse = Mouse.current;
 
-            if (mouse != null) PointerScreen = mouse.position.ReadValue();
+            if (mouse != null)
+            {
+                PointerScreen = mouse.position.ReadValue();
+                AttackMainDown = mouse.leftButton.wasPressedThisFrame;
+                AttackMainHeld = mouse.leftButton.isPressed;
+                AttackOffDown = mouse.rightButton.wasPressedThisFrame;
+                AttackOffHeld = mouse.rightButton.isPressed;
+            }
+            else
+            {
+                AttackMainDown = false;
+                AttackMainHeld = false;
+                AttackOffDown = false;
+                AttackOffHeld = false;
+            }
 
             if (keyboard == null)
             {
@@ -56,6 +78,8 @@ namespace TanLuZhe
                 JumpHeld = false;
                 DownHeld = false;
                 ReleaseHeld = false;
+                InteractDown = false;
+                InventoryDown = false;
                 _jumpDown = false;
                 _grappleDown = false;
                 return;
@@ -82,6 +106,8 @@ namespace TanLuZhe
 
             ReleaseHeld = keyboard[_releaseKey].isPressed;
             DownHeld = keyboard[_downKey].isPressed || keyboard.downArrowKey.isPressed;
+            InteractDown = keyboard[_interactKey].wasPressedThisFrame;
+            InventoryDown = keyboard[_inventoryKey].wasPressedThisFrame;
         }
     }
 }

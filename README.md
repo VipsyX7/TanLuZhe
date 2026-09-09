@@ -37,10 +37,14 @@ TanLuZhe ▸ Build Everything (art + project + scene)
 | **空格 / W / ↑** | 跳跃（**按住越久跳得越高**；空中松开会被"跳跃截断"重力拉下来） |
 | **E** | 朝**鼠标指针方向**发射钩锁 |
 | **左 Ctrl** | 松开钩锁（**保留惯性**，钩锁不再拉扯玩家） |
+| **鼠标左键** | **主手武器攻击** |
+| **鼠标右键** | **副手武器攻击** |
+| **F** | 拾取脚下的武器放进背包 |
+| **B** | 打开/关闭背包（装备武器） |
 | **S + 空格** | 从单向平台向下穿落 |
 | **R** | 重开本关 |
 
-屏幕左上角会实时显示钩锁状态：`HOOK HOOKED - WALL   rope 3.21 m   winch 7.4 m/s`，方便观察绳索长度与绞盘速度。
+屏幕左上角会实时显示钩锁状态（`HOOK HOOKED - WALL  rope 3.21 m  pull 12.4 m/s  |  ACTION LOCKED`）和双手武器（`MAIN [LMB] Sword   OFF [RMB] Bow   BAG 2/8 [B]`）。
 
 ---
 
@@ -150,6 +154,42 @@ private void FixedUpdate()
 
 ---
 
+## 三·B、武器与攻击系统
+
+代码：`Assets/Scripts/Weapons/` —— `WeaponDefinition`（数据）、`PlayerWeapons`（装备与攻击）、`WeaponHandVisual`（手持显示）、`Projectile2D`（远程弹道）、`WeaponPickup2D`（地面拾取）、`WeaponInventoryUI`（背包界面）。
+
+### 装备与操作
+
+| 操作 | 行为 |
+|---|---|
+| **F** | 把脚下高亮的武器放进背包（容量 8），世界里的武器消失 |
+| **B** | 打开/关闭背包界面；界面打开时左键不再攻击，而是操作 UI |
+| **左键** | 用**主手**武器攻击（`PlayerWeapons.ExecuteAttack(main, false)`） |
+| **右键** | 用**副手**武器攻击（`ExecuteAttack(off, true)`） |
+
+背包界面（B）里：**点手部槽位选中 → 点背包里的武器装备进去 → 再点已选中的槽位就卸下**。主副手各自独立冷却，可以一边挥剑一边射箭。
+
+### 攻击实现
+
+* **近战**：`Physics2D.OverlapBox(手部 + 朝向 × reach, meleeSize, 角度, 过滤器, 结果)`，对命中的所有 `IDamageable` 结算伤害 + 沿攻击方向的击退，并生成 `slash.png` 弧光与火花、轻微震屏。
+* **远程**：生成 `Projectile2D`，每个物理步用 `Physics2D.Raycast` 扫掠推进（**不用碰撞体**，高速也不会穿墙），命中敌人结算伤害，命中地形只留火花。
+* 攻击方向始终跟随鼠标指针；主副手武器都以手部枢轴为圆心指向光标，攻击时播放挥砍弧线动画。
+* **勾中期间（绳索拉扯）所有攻击被屏蔽**，与"操作键无效"规则一致；脱钩后立即恢复。
+
+### 武器数据（`Assets/Settings/Weapons/*.asset`）
+
+| 武器 | 类型 | 伤害 | 冷却 | 特点 |
+|---|---|---|---|---|
+| Sword | 近战 | 28 | 0.42 s | 均衡，起始主手 |
+| Spear | 近战 | 20 | 0.30 s | 攻击距离 1.3 m，出手快 |
+| Hammer | 近战 | 55 | 0.95 s | 击退 22，命中震屏最强 |
+| Bow | 远程 | 22 | 0.55 s | 弹速 34 m/s，起始副手 |
+| Wand | 远程 | 13 | 0.20 s | 高频低伤 |
+
+全部是 ScriptableObject，可以直接在 Inspector 里改数值，改完立刻生效（不用重编译）。想加新武器：`Assets ▸ Create ▸ TanLuZhe ▸ Weapon`。
+
+---
+
 ## 四、玩家物理系统（`PlayerController2D.cs`）
 
 **设计原则：所有移动都走"有限加速度的力/速度驱动"，而不是每帧硬写 `velocity`**，这样钩锁、敌人撞击、移动平台注入的动量不会被控制器瞬间抹平。
@@ -158,7 +198,7 @@ private void FixedUpdate()
 |---|---|
 | 跳跃 | 跳跃缓冲（0.12 s）、土狼时间（0.10 s）、可变跳跃高度（松键截断重力 ×2.8） |
 | 重力 | 上升 / 下落 / 顶点悬停三段重力（42 / 74 / 26 m/s²）、最大下落速度 24 m/s |
-| 水平 | 地面加减速（75 / 95）、空中加速（48）、**空中无输入不减速**、转身加速 ×1.8、被钩时操控 ×0.45 |
+| 水平 | 地面加减速（75 / 95）、空中加速（48）、**空中无输入不减速**、转身加速 ×1.8、勾中期间完全接管 |
 | 墙体 | 墙滑（限速 4.5 m/s）、墙跳（11, 15.5）、墙跳操控锁定 0.18 s、墙土狼 0.10 s |
 | 地面检测 | 直接读真实接触流形 `Rigidbody2D.GetContacts()`，另加 `BoxCast` 兜底；法线过滤支持 ≤50° 斜坡 |
 | 斜坡 | 把驱动力投影到切向；无输入时施加**抓地力**抵消重力切向分量（角色摩擦为 0，不影响墙滑） |
@@ -197,7 +237,7 @@ Assets/
 
 ## 六、自动化验证（本仓库实际跑通的结果）
 
-### PlayMode 测试：21/21 通过
+### PlayMode 测试：31/31 通过
 
 ```
 Unity.exe -batchmode -projectPath <项目> -runTests -testPlatform PlayMode -testResults results.xml
@@ -228,6 +268,17 @@ Unity.exe -batchmode -projectPath <项目> -runTests -testPlatform PlayMode -tes
 | `Enemy_MassHeavier_MeansLessAcceleration` | 质量对同尺寸冲量的影响生效 |
 | `DemoScene_RunsEndToEnd` | **加载真实演示场景**跑完整流程：落地→跑→跳→钩墙（Ctrl 脱钩）→再钩墙（到达自动脱钩）→钩敌人（接触自动脱钩）→相机跟随，期间任何异常/错误日志都会导致失败 |
 | `DemoScene_EnemiesPatrolAndPickupsExist` | 场景内容齐备且敌人真的在巡逻 |
+| `PickUp_F_AddsWeaponToBackpack` | **按 F 把武器收进背包**，世界里的拾取物消失 |
+| `PickUp_BackpackRespectsCapacity` | 背包满时拒绝新武器 |
+| `Equip_SwapsBetweenHandsAndBackpack` | 装备/换手/卸下时武器在手与背包之间正确流动 |
+| `MeleeAttack_DamagesEnemyInFront` | 主手近战命中前方敌人并结算伤害 |
+| `MeleeAttack_RespectsCooldown` | 冷却期间重复按键不生效，冷却结束后恢复 |
+| `RangedAttack_ProjectileDamagesEnemy` | 副手远程发射弹道并命中敌人 |
+| `LeftMouseUsesMainHand_RightMouseUsesOffHand` | **左键 = 主手（28），右键 = 副手（7）**，伤害值可区分 |
+| `Attack_BlockedWhileRopeIsAttached` | 勾中期间攻击无效，脱钩后恢复 |
+| `Attack_BlockedWhileBackpackIsOpen` | 背包打开时左键不再攻击 |
+| `Inventory_BKeyTogglesThePanel` | **B 键开关背包** |
+| `InventoryUI_ClickEquipsIntoTheSelectedHand` | **点背包武器 → 装到选中的手**（主手/副手各测一次） |
 
 ### 场景静态校验：48 项检查全过
 
@@ -255,6 +306,9 @@ Unity.exe -batchmode -quit -projectPath <项目> -executeMethod TanLuZhe.EditorT
 | 跳得更高 / 更飘 | `PlayerController2D._jumpHeight`、`_riseGravity`、`_fallGravity` |
 | 空中操控更强 | `_airAcceleration` |
 | 勾中时是否锁操作 / 关重力 | `PlayerController2D` 里的 `IsBeingPulled` 分支（勾中锁定、出手不锁） |
+| 武器伤害/冷却/击退 | `Assets/Settings/Weapons/*.asset`（Inspector 直接改） |
+| 背包容量、起始武器 | `PlayerWeapons._backpackCapacity` / `_startingMainHand` / `_startingOffHand` |
+| 挥砍动画幅度 | `WeaponHandVisual._swingArc` / `_swingTime` |
 | 墙跳手感 | `_wallJumpVelocity`、`_wallJumpControlLock` |
 
 所有参数都在 Inspector 上暴露（`[SerializeField]`），可以在运行时实时拖动观察。

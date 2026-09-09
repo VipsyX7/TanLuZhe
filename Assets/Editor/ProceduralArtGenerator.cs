@@ -1,7 +1,7 @@
 // ProceduralArtGenerator.cs
 // Pure-C# procedural pixel-art generator for the TanLuZhe 2D URP platformer.
 //
-// Generates 17 PNG sprite assets into Assets/Art/Generated/ and configures the
+// Generates 24 PNG sprite assets into Assets/Art/Generated/ and configures the
 // TextureImporter settings for each one. No external packages, no System.Drawing,
 // no binary assets checked in: every pixel is drawn in code with Texture2D and
 // written with EncodeToPNG().
@@ -60,6 +60,15 @@ public static class ProceduralArtGenerator
         count += Save("bg_cloud.png", BuildBgCloud(), FilterMode.Bilinear, TextureWrapMode.Clamp, Vector4.zero);
         count += Save("dust.png", BuildDust(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
         count += Save("white.png", BuildWhite(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+
+        // Weapons, projectiles and VFX.
+        count += Save("weapon_sword.png", BuildWeaponSword(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("weapon_spear.png", BuildWeaponSpear(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("weapon_hammer.png", BuildWeaponHammer(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("weapon_bow.png", BuildWeaponBow(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("weapon_wand.png", BuildWeaponWand(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("bolt.png", BuildBolt(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
+        count += Save("slash.png", BuildSlash(), FilterMode.Point, TextureWrapMode.Clamp, Vector4.zero);
 
         AssetDatabase.Refresh();
 
@@ -1142,6 +1151,430 @@ public static class ProceduralArtGenerator
 
         // 1px inset core, kept fully opaque so the sprite stays a full bleed fill.
         Rect(c, 1, 1, 2, 2, white);
+
+        return c;
+    }
+
+    // ------------------------------------------------------------------
+    // Weapons, projectiles and VFX
+    // ------------------------------------------------------------------
+
+    // 32x16 short sword lying horizontally and pointing +X: the tip sits on the
+    // right edge at x = 31 on the vertical centre line, the pommel on the left
+    // edge. Steel blade (4px at the guard, 2px at the tip) with a bright white
+    // highlight along the top edge, a small dark grey crossguard just left of
+    // centre, a warm brown grip and a dark round pommel.
+    private static Canvas BuildWeaponSword()
+    {
+        Canvas c = New(32, 16);
+
+        Color32 steel = new Color32(178, 190, 206, 255);
+        Color32 steelHi = new Color32(226, 238, 248, 255);
+        Color32 steelEdge = new Color32(248, 253, 255, 255);
+        Color32 steelLo = new Color32(132, 146, 166, 255);
+        Color32 guard = new Color32(96, 102, 120, 255);
+        Color32 guardHi = new Color32(138, 146, 164, 255);
+        Color32 guardLo = new Color32(70, 76, 92, 255);
+        Color32 grip = new Color32(160, 106, 62, 255);
+        Color32 gripLo = new Color32(122, 78, 44, 255);
+        Color32 pommel = new Color32(92, 80, 74, 255);
+        Color32 pommelHi = new Color32(134, 122, 114, 255);
+        Color32 outline = new Color32(44, 48, 60, 255);
+
+        // Blade: 4px thick out of the guard, narrowing to 2px at the tip so the
+        // point still lands exactly on (31, 8).
+        for (int x = 13; x <= 31; x++)
+        {
+            bool narrow = x >= 28;
+            int yTop = narrow ? 8 : 9;
+            int yBot = narrow ? 7 : 6;
+
+            for (int y = yBot; y <= yTop; y++)
+            {
+                Color32 col;
+                if (y == yTop)
+                {
+                    col = steelEdge;      // bright white edge along the top
+                }
+                else if (y == yTop - 1)
+                {
+                    col = steelHi;
+                }
+                else if (y == yBot)
+                {
+                    col = steelLo;        // shaded lower bevel
+                }
+                else
+                {
+                    col = steel;
+                }
+                Set(c, x, y, col);
+            }
+        }
+
+        // Crossguard: 2px wide and taller than the blade, just left of centre.
+        Rect(c, 11, 5, 2, 6, guard);
+        Rect(c, 11, 10, 2, 1, guardHi);
+        Rect(c, 11, 5, 2, 1, guardLo);
+
+        // Grip: 2px tall warm brown with darker wrap bands.
+        Rect(c, 3, 7, 8, 2, grip);
+        Rect(c, 3, 7, 8, 1, gripLo);
+        Rect(c, 5, 7, 1, 2, gripLo);
+        Rect(c, 7, 7, 1, 2, gripLo);
+        Rect(c, 9, 7, 1, 2, gripLo);
+
+        // Round pommel flush with the left edge.
+        Circle(c, 2f, 8f, 2.5f, pommel);
+        Set(c, 1, 9, pommelHi);
+        Set(c, 2, 9, pommelHi);
+
+        Outline(c, outline);
+
+        return c;
+    }
+
+    // 40x12 spear pointing +X: a 2px wooden shaft along the centre line, a dark
+    // binding ring, and a grey/steel leaf-shaped head in the rightmost 12px with a
+    // lit top half and a crisp white top edge. The point lands on (39, 5..6).
+    private static Canvas BuildWeaponSpear()
+    {
+        Canvas c = New(40, 12);
+
+        Color32 wood = new Color32(166, 114, 66, 255);
+        Color32 woodHi = new Color32(200, 150, 98, 255);
+        Color32 woodLo = new Color32(124, 80, 44, 255);
+        Color32 binding = new Color32(78, 70, 64, 255);
+        Color32 bindingHi = new Color32(122, 112, 102, 255);
+        Color32 steel = new Color32(166, 178, 194, 255);
+        Color32 steelHi = new Color32(210, 224, 238, 255);
+        Color32 steelWhite = new Color32(244, 250, 255, 255);
+        Color32 steelLo = new Color32(126, 138, 156, 255);
+        Color32 outline = new Color32(44, 48, 60, 255);
+
+        // Shaft: 2px along the centre line y = 5..6, x = 0..26.
+        Rect(c, 0, 5, 27, 2, wood);
+        Rect(c, 0, 6, 27, 1, woodHi);
+        Set(c, 6, 5, woodLo);
+        Set(c, 13, 5, woodLo);
+        Set(c, 20, 5, woodLo);
+
+        // Binding ring where the head meets the shaft.
+        Rect(c, 26, 4, 2, 4, binding);
+        Rect(c, 26, 7, 2, 1, bindingHi);
+
+        // Leaf-shaped head, x = 28..39. halfH is the half height per column.
+        float[] halfH = { 1.4f, 2.3f, 2.9f, 3.3f, 3.3f, 3.0f, 2.6f, 2.1f, 1.6f, 1.2f, 0.8f, 0.6f };
+        for (int i = 0; i < halfH.Length; i++)
+        {
+            int x = 28 + i;
+            float half = halfH[i];
+            int yb = Mathf.CeilToInt(5.5f - half);
+            int yt = Mathf.FloorToInt(5.5f + half);
+
+            for (int y = yb; y <= yt; y++)
+            {
+                float dy = y + 0.5f - 6f;
+                Color32 col;
+                if (y == yt)
+                {
+                    col = steelWhite;
+                }
+                else if (dy > 0.2f)
+                {
+                    col = steelHi;
+                }
+                else if (dy < -1f)
+                {
+                    col = steelLo;
+                }
+                else
+                {
+                    col = steel;
+                }
+                Set(c, x, y, col);
+            }
+        }
+
+        Outline(c, outline);
+
+        return c;
+    }
+
+    // 28x28 war hammer with the head on the RIGHT: a chunky dark steel block with a
+    // lit top face and a 1px dark outline, plus a short brown wooden handle running
+    // to the left edge and ending in a dark round pommel.
+    private static Canvas BuildWeaponHammer()
+    {
+        Canvas c = New(28, 28);
+
+        Color32 steel = new Color32(118, 126, 144, 255);
+        Color32 steelTop = new Color32(158, 170, 188, 255);
+        Color32 steelTopHi = new Color32(202, 214, 230, 255);
+        Color32 steelLo = new Color32(88, 94, 110, 255);
+        Color32 wood = new Color32(166, 114, 66, 255);
+        Color32 woodHi = new Color32(198, 148, 96, 255);
+        Color32 woodLo = new Color32(124, 80, 44, 255);
+        Color32 pommel = new Color32(88, 78, 74, 255);
+        Color32 pommelHi = new Color32(126, 116, 110, 255);
+        Color32 outline = new Color32(42, 46, 58, 255);
+
+        // Handle: 4px tall, vertically centred, from the pommel into the head.
+        Rect(c, 2, 12, 12, 4, wood);        // x2..13  y12..15
+        Rect(c, 2, 15, 12, 1, woodHi);      // lit top row
+        Rect(c, 2, 12, 12, 1, woodLo);      // shaded bottom row
+        Rect(c, 5, 12, 1, 4, woodLo);       // grip wraps
+        Rect(c, 8, 12, 1, 4, woodLo);
+        Rect(c, 11, 12, 1, 4, woodLo);
+
+        // Round pommel at the far left.
+        RoundRect(c, 0, 11, 4, 6, 2, pommel);
+        Set(c, 1, 15, pommelHi);
+        Set(c, 2, 15, pommelHi);
+
+        // Head: 16x14 block on the right, x = 12..27, y = 7..20.
+        Rect(c, 12, 7, 16, 14, steel);
+        Rect(c, 12, 16, 16, 5, steelTop);      // lit top face
+        Rect(c, 12, 20, 16, 1, steelTopHi);    // 1px highlight along the top
+        Rect(c, 12, 15, 16, 1, steelLo);       // seam under the top face
+        Rect(c, 12, 7, 16, 1, steelLo);        // shaded bottom row
+
+        Outline(c, outline);
+
+        return c;
+    }
+
+    // 24x32 wooden recurve bow seen from the side, opening toward +X. The limb is a
+    // warm-brown circular arc bulging to the left (the tips curve back toward the
+    // string), a pale 1px string runs vertically down the right side of the limb,
+    // and a small leather grip wrap sits at the middle of the limb.
+    private static Canvas BuildWeaponBow()
+    {
+        Canvas c = New(24, 32);
+
+        Color32 wood = new Color32(166, 114, 68, 255);
+        Color32 woodHi = new Color32(204, 152, 100, 255);
+        Color32 woodLo = new Color32(122, 78, 44, 255);
+        Color32 leather = new Color32(106, 72, 52, 255);
+        Color32 leatherHi = new Color32(142, 102, 78, 255);
+        Color32 stringCol = new Color32(228, 234, 228, 255);
+        Color32 outline = new Color32(44, 48, 60, 255);
+
+        // Limb: an annulus of a circle centred right of the sprite, so the concave
+        // side of the arc faces +X. dx <= -2.5 keeps the tips inside the canvas and
+        // lets them curve back toward the string.
+        float cx = 22.5f;
+        float cy = 16f;
+        float r = 14f;
+        const float HalfT = 1.5f;
+
+        for (int y = 0; y < 32; y++)
+        {
+            for (int x = 0; x < 24; x++)
+            {
+                float dx = x + 0.5f - cx;
+                float dy = y + 0.5f - cy;
+                if (dx > -2.5f)
+                {
+                    continue;
+                }
+
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float t = d - r;
+                if (t > HalfT || t < -HalfT)
+                {
+                    continue;
+                }
+
+                Color32 col = t < -0.5f ? woodHi : (t > 0.5f ? woodLo : wood);
+                Set(c, x, y, col);
+            }
+        }
+
+        // Leather grip wrap at the middle of the limb.
+        Rect(c, 6, 13, 6, 6, leather);      // x6..11  y13..18
+        Rect(c, 6, 17, 6, 1, leatherHi);
+        Rect(c, 6, 14, 6, 1, leatherHi);
+
+        Outline(c, outline);
+
+        // String: thin pale vertical line on the right side of the limb, drawn after
+        // the outline so it stays 1px wide. It spans the two limb tips (y1..30).
+        for (int y = 1; y <= 30; y++)
+        {
+            Set(c, 20, y, stringCol);
+        }
+
+        return c;
+    }
+
+    // 28x12 magic wand pointing +X: a dark violet wooden shaft with a subtle
+    // highlight along the left 18px, a pale bone/grey binding ring, and a bright
+    // cyan gem at the right tip (hot core plus a slightly darker cyan rim).
+    private static Canvas BuildWeaponWand()
+    {
+        Canvas c = New(28, 12);
+
+        Color32 violet = new Color32(98, 72, 152, 255);
+        Color32 violetHi = new Color32(134, 104, 188, 255);
+        Color32 violetLo = new Color32(72, 52, 116, 255);
+        Color32 bone = new Color32(206, 200, 186, 255);
+        Color32 boneLo = new Color32(158, 152, 140, 255);
+        Color32 gemRim = new Color32(64, 196, 226, 255);
+        Color32 gemCore = new Color32(168, 252, 255, 255);
+        Color32 gemHot = new Color32(240, 255, 255, 255);
+        Color32 outline = new Color32(40, 36, 56, 255);
+
+        // Shaft: 2px along the centre line y = 5..6, x = 0..21.
+        Rect(c, 0, 5, 22, 2, violet);
+        Rect(c, 0, 6, 18, 1, violetHi);     // subtle highlight, left 18px only
+        Set(c, 4, 5, violetLo);
+        Set(c, 9, 5, violetLo);
+        Set(c, 14, 5, violetLo);
+
+        // Pale bone binding ring just before the gem.
+        Rect(c, 18, 4, 2, 4, bone);
+        Rect(c, 18, 4, 2, 1, boneLo);
+
+        // Gem at the tip: darker cyan rim, bright core, hot glint.
+        Circle(c, 25f, 6f, 3f, gemRim);
+        Circle(c, 25f, 6f, 1.8f, gemCore);
+        Set(c, 24, 7, gemHot);
+        Set(c, 25, 7, gemHot);
+
+        Outline(c, outline);
+
+        return c;
+    }
+
+    // 16x8 glowing energy bolt pointing +X: a bright white-cyan elongated diamond
+    // with a soft cyan halo that fades out at the edges, a sharp point on the right
+    // edge at (15, 4) and a short trailing tail on the left. Corners stay clear.
+    private static Canvas BuildBolt()
+    {
+        Canvas c = New(16, 8);
+
+        Color32 coreHot = new Color32(255, 255, 255, 255);
+        Color32 core = new Color32(214, 252, 255, 255);
+        Color32 coreRim = new Color32(142, 238, 255, 255);
+        Color32 halo = new Color32(110, 220, 255, 255);
+
+        // Soft halo behind the bolt (max-alpha composited, so it never darkens).
+        SoftCircle(c, 7.5f, 4f, 6.6f, new Color32(110, 220, 255, 110), 3f);
+
+        // Half height of the solid core per column: fat near the head, a long taper
+        // out to the point and a short tail on the left.
+        float[] halfCore = { 1.0f, 1.6f, 2.1f, 2.5f, 2.8f, 2.9f, 2.9f, 2.8f,
+                             2.6f, 2.3f, 2.0f, 1.7f, 1.4f, 1.1f, 0.9f, 0.7f };
+
+        for (int x = 0; x < 16; x++)
+        {
+            float hc = halfCore[x];
+            float hg = hc + 2.4f;
+            if (hg > 3.45f)
+            {
+                hg = 3.45f;
+            }
+
+            for (int y = 0; y < 8; y++)
+            {
+                float dy = Mathf.Abs(y + 0.5f - 4f);
+                if (dy > hg)
+                {
+                    continue;
+                }
+
+                if (dy <= hc)
+                {
+                    Color32 col = dy < 0.6f ? coreHot : (dy < hc - 0.4f ? core : coreRim);
+                    Set(c, x, y, col);
+                }
+                else
+                {
+                    float a = Mathf.Clamp01((hg - dy) / 2.4f);
+                    Set(c, x, y, new Color32(halo.r, halo.g, halo.b, ToByte(140f * a)));
+                }
+            }
+        }
+
+        return c;
+    }
+
+    // 48x48 melee slash arc: a thick crescent of translucent white-cyan energy that
+    // opens toward +X (the concave side faces right). The band follows a circle of
+    // radius ~18 centred at (21.5, 24) — just left of the sprite's middle, which is
+    // what keeps the whole band inside the canvas — and its alpha tapers to zero at
+    // both ends. A brighter thin line runs along the inner (right) edge.
+    private static Canvas BuildSlash()
+    {
+        Canvas c = New(48, 48);
+
+        Color32 band = new Color32(196, 246, 255, 255);
+        Color32 bandOuter = new Color32(148, 224, 255, 255);
+        Color32 inner = new Color32(244, 255, 255, 255);
+
+        const float Cx = 21.5f;
+        const float Cy = 24f;
+        const float RIn = 15.5f;
+        const float ROut = 21.5f;
+        const float A0 = 65f;
+        const float A1 = 295f;
+        const float Span = A1 - A0;
+        const float Taper = 0.16f;
+
+        for (int y = 0; y < 48; y++)
+        {
+            for (int x = 0; x < 48; x++)
+            {
+                float dx = x + 0.5f - Cx;
+                float dy = y + 0.5f - Cy;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                if (d < RIn - 1f || d > ROut + 1f)
+                {
+                    continue;
+                }
+
+                float ang = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                if (ang < 0f)
+                {
+                    ang += 360f;
+                }
+                if (ang < A0 || ang > A1)
+                {
+                    continue;
+                }
+
+                float t = (ang - A0) / Span;
+                float ends = Mathf.Clamp01(Mathf.Min(t, 1f - t) / Taper);
+                if (ends <= 0f)
+                {
+                    continue;
+                }
+
+                // Brighter thin line along the inner edge.
+                if (d <= RIn + 1.6f)
+                {
+                    float lit = Mathf.Clamp01((RIn + 1.6f - d) / 1f);
+                    int la = ToByte(255f * ends * lit);
+                    if (la > 0)
+                    {
+                        Set(c, x, y, new Color32(inner.r, inner.g, inner.b, (byte)la));
+                    }
+                    continue;
+                }
+
+                float u = (d - RIn) / (ROut - RIn);
+                float prof = Mathf.Clamp01((1f - u) / 0.55f);
+                int alpha = ToByte(238f * prof * ends);
+                if (alpha <= 0)
+                {
+                    continue;
+                }
+
+                Color32 col = u > 0.55f ? bandOuter : band;
+                Set(c, x, y, new Color32(col.r, col.g, col.b, (byte)alpha));
+            }
+        }
 
         return c;
     }

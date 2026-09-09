@@ -15,6 +15,7 @@ namespace TanLuZhe.EditorTools
             Debug.Log("[TanLuZhe] === pipeline start ===");
             ProceduralArtGenerator.GenerateAll();
             ProjectSetup.Run();
+            WeaponLibraryGenerator.GenerateAll();
             DemoSceneBuilder.BuildFromCommandLine();
             Debug.Log("[TanLuZhe] === pipeline done ===");
         }
