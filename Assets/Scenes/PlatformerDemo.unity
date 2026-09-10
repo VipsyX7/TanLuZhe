@@ -903,7 +903,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 3328
   _hookSpeed: 48
-  _maxRange: 10
+  _maxRange: 8
   _hookRadius: 0.08
   _retractSpeed: 70
   _pullAcceleration: 100
