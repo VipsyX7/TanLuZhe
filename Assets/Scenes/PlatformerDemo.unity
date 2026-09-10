@@ -903,12 +903,12 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 3328
   _hookSpeed: 48
-  _maxRange: 16
+  _maxRange: 10
   _hookRadius: 0.08
   _retractSpeed: 70
-  _pullAcceleration: 140
+  _pullAcceleration: 100
   _maxPullSpeed: 30
-  _releaseDistance: 1
+  _releaseDistance: 2
   _ropeGrip: 1
   _positionCorrection: 9
   _breakStretch: 2.2
@@ -6929,7 +6929,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 54
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
