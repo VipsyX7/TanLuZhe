@@ -44,6 +44,15 @@ namespace TanLuZhe
         [Tooltip("Stagger time right after the hook latches on.")]
         [Range(0f, 2f)] [SerializeField] private float _grappleStagger = 0.4f;
 
+        [Header("Audio")]
+        [Tooltip("Played every time this monster takes damage (weapon hit, grapple latch, stomp).")]
+        [SerializeField] private AudioClip _hurtSound;
+        [Range(0f, 1f)] [SerializeField] private float _hurtVolume = 0.85f;
+        [Tooltip("Random pitch spread so a flurry of hits does not sound like one machine gun.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _hurtPitchJitter = 0.12f;
+        [Tooltip("1 = fully positional 3D sound, 0 = flat 2D. A 2D platformer usually wants a low value.")]
+        [Range(0f, 1f)] [SerializeField] private float _hurtSpatialBlend = 0.25f;
+
         [Header("Visuals")]
         [SerializeField] private SpriteRenderer _visual;
         [SerializeField] private Sprite _idleSprite;
@@ -52,6 +61,7 @@ namespace TanLuZhe
 
         private Rigidbody2D _rb;
         private Collider2D _col;
+        private AudioSource _audioSource;
         private PlayerController2D _player;
         private Transform _playerTransform;
 
@@ -70,6 +80,10 @@ namespace TanLuZhe
         public float Health => _health;
         public float GrappleResistance => 1f;
         public bool IsGrappled => _grappleAttached;
+        public AudioClip HurtSound => _hurtSound;
+
+        /// <summary>How many times the hurt sound has been fired. Handy for debugging and tests.</summary>
+        public int HurtSoundPlays { get; private set; }
 
         private void Awake()
         {
@@ -84,6 +98,15 @@ namespace TanLuZhe
             if (_visual == null) _visual = GetComponentInChildren<SpriteRenderer>();
             if (_visual != null) _baseColor = _visual.color;
             if (_visual != null && _idleSprite == null) _idleSprite = _visual.sprite;
+
+            _audioSource = GetComponent<AudioSource>();
+            if (_audioSource == null) _audioSource = gameObject.AddComponent<AudioSource>();
+            _audioSource.playOnAwake = false;
+            _audioSource.loop = false;
+            _audioSource.spatialBlend = _hurtSpatialBlend;
+            _audioSource.rolloffMode = AudioRolloffMode.Linear;
+            _audioSource.minDistance = 3f;
+            _audioSource.maxDistance = 22f;
         }
 
         private void Start()
@@ -218,8 +241,21 @@ namespace TanLuZhe
 
             FxManager.Sparks(transform.position, 8, 5f, new Color(1f, 0.5f, 0.7f));
             CameraRig2D.Shake(0.25f, 0.15f);
+            PlayHurtSound();
 
             if (_health <= 0f) Die();
+        }
+
+        /// <summary>Fires the impact sound. Called for every damage source: weapons, hook, stomp.</summary>
+        private void PlayHurtSound()
+        {
+            if (_hurtSound == null || _audioSource == null) return;
+            if (_hurtVolume <= 0f) return;
+
+            float jitter = Mathf.Max(0f, _hurtPitchJitter);
+            _audioSource.pitch = jitter > 0f ? Random.Range(1f - jitter, 1f + jitter) : 1f;
+            _audioSource.PlayOneShot(_hurtSound, _hurtVolume);
+            HurtSoundPlays++;
         }
 
         private void Die()

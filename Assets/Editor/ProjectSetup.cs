@@ -10,6 +10,8 @@ namespace TanLuZhe.EditorTools
     public static class ProjectSetup
     {
         public const string PhysicsDir = "Assets/Settings/Physics/";
+        public const string AudioDir = "Assets/Audio/";
+        public const string HitImpactSoundPath = AudioDir + "660770__madpancake__hit-impact.ogg";
 
         [MenuItem("TanLuZhe/0. Setup Project (layers + physics)", false, 0)]
         public static void Run()
@@ -17,8 +19,38 @@ namespace TanLuZhe.EditorTools
             EnsureLayers();
             EnsurePhysicsMaterials();
             EnsurePhysicsSettings();
+            ConfigureAudioImport();
             AssetDatabase.SaveAssets();
-            Debug.Log("[TanLuZhe] Project setup complete: layers, physics materials, 2D physics settings.");
+            Debug.Log("[TanLuZhe] Project setup complete: layers, physics materials, 2D physics settings, audio import.");
+        }
+
+        /// <summary>The impact clip every monster plays when it takes damage.</summary>
+        public static AudioClip HitImpactSound => AssetDatabase.LoadAssetAtPath<AudioClip>(HitImpactSoundPath);
+
+        /// <summary>
+        /// Imports the impact sound as a short, fully preloaded clip so the first hit has no hitch.
+        /// </summary>
+        public static void ConfigureAudioImport()
+        {
+            AudioImporter importer = AssetImporter.GetAtPath(HitImpactSoundPath) as AudioImporter;
+            if (importer == null)
+            {
+                Debug.LogWarning($"[TanLuZhe] Impact sound not found at {HitImpactSoundPath}. " +
+                                 "Drop the .ogg into Assets/Audio/ and re-run setup.");
+                return;
+            }
+
+            AudioImporterSampleSettings settings = importer.defaultSampleSettings;
+            settings.loadType = AudioClipLoadType.DecompressOnLoad;
+            settings.compressionFormat = AudioCompressionFormat.Vorbis;
+            settings.quality = 0.7f;
+            settings.preloadAudioData = true;
+            settings.sampleRateSetting = AudioSampleRateSetting.PreserveSampleRate;
+
+            importer.defaultSampleSettings = settings;
+            importer.forceToMono = false;
+            importer.loadInBackground = false;
+            importer.SaveAndReimport();
         }
 
         public static void EnsureLayers()

@@ -593,6 +593,10 @@ namespace TanLuZhe.EditorTools
             SetField(enemy, "_maxHealth", mass > 3f ? 90f : 45f);
             SetField(enemy, "_patrolSpeed", mass > 3f ? 2.2f : 3f);
             SetField(enemy, "_chaseSpeed", mass > 3f ? 3.4f : 4.8f);
+            SetField(enemy, "_hurtSound", ProjectSetup.HitImpactSound);
+            SetField(enemy, "_hurtVolume", 0.85f);
+            SetField(enemy, "_hurtPitchJitter", 0.12f);
+            SetField(enemy, "_hurtSpatialBlend", 0.25f);
         }
 
         private static void CreateCheckpoint(Vector2 position)

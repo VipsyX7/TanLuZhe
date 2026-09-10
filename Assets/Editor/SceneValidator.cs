@@ -140,6 +140,16 @@ namespace TanLuZhe.EditorTools
 
             // ---- level content
             Check(Count<EnemyController2D>() >= 4, $"Enemies present ({Count<EnemyController2D>()})");
+
+            int enemiesWithSound = 0;
+            EnemyController2D[] allEnemies = Object.FindObjectsByType<EnemyController2D>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < allEnemies.Length; i++)
+            {
+                if (GetRef(allEnemies[i], "_hurtSound") != null) enemiesWithSound++;
+            }
+            Check(allEnemies.Length > 0 && enemiesWithSound == allEnemies.Length,
+                $"Every enemy plays the hit impact sound ({enemiesWithSound}/{allEnemies.Length})");
+
             Check(Count<Collectible2D>() >= 15, $"Coins present ({Count<Collectible2D>()})");
             Check(Count<Checkpoint2D>() >= 3, $"Checkpoints present ({Count<Checkpoint2D>()})");
             Check(Count<LevelGoal2D>() == 1, "Exactly one level goal");

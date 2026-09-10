@@ -176,6 +176,18 @@ private void FixedUpdate()
 * 攻击方向始终跟随鼠标指针；主副手武器都以手部枢轴为圆心指向光标，攻击时播放挥砍弧线动画。
 * **勾中期间（绳索拉扯）所有攻击被屏蔽**，与"操作键无效"规则一致；脱钩后立即恢复。
 
+### 打击音效
+
+怪物每次受到伤害都会播放 **`Assets/Audio/660770__madpancake__hit-impact.ogg`**：
+
+* 触发点统一在 `EnemyController2D.TakeDamage()` 里的 `PlayHurtSound()`，所以**任何伤害来源都会响**：武器近战/远程、钩锁勾中瞬间的撞击伤害、踩踏。
+* 每只怪自带一个 `AudioSource`（`Awake` 里自动创建，`playOnAwake = false`）；用 `PlayOneShot` 播放，多只怪同时挨打不会互相打断。
+* 音高带 ±12% 随机抖动（`_hurtPitchJitter`），连打不会听成机关枪；音量 0.85，`spatialBlend = 0.25` 带一点方位感。
+* 死亡后 `TakeDamage` 提前返回，所以尸体不会继续出声。
+* 导入设置为 **DecompressOnLoad + Vorbis + 预加载**（`ProjectSetup.ConfigureAudioImport()`），第一次挨打不会卡顿。
+
+换音效：把 ogg 丢进 `Assets/Audio/`，改 `ProjectSetup.HitImpactSoundPath`；或者直接在场景里选中敌人，把 `Enemy Controller 2D` 的 **Hurt Sound** 槽换掉（不需要改代码、也不需要重建场景）。
+
 ### 武器数据（`Assets/Settings/Weapons/*.asset`）
 
 | 武器 | 类型 | 伤害 | 冷却 | 特点 |

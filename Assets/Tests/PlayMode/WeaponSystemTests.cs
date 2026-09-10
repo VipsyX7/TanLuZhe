@@ -439,6 +439,57 @@ namespace TanLuZhe.Tests
                 "Left clicks belong to the backpack UI while it is open.");
         }
 
+        // ================================================================ audio
+        [UnityTest]
+        public IEnumerator Enemy_PlaysHitSoundWhenDamaged()
+        {
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            EnemyController2D enemy = MakeEnemy(new Vector2(1.6f, 2f), 100f);
+
+            AudioClip clip = AudioClip.Create("HitTestClip", 2205, 1, 44100, false);
+            _created.Add(clip);
+            SetField(enemy, "_hurtSound", clip);
+            SetField(enemy, "_hurtVolume", 0.85f);
+
+            WeaponDefinition sword = MakeWeapon("Sword", WeaponKind.Melee, 28f, 0.4f);
+            player.Weapons.TryAddWeapon(sword);
+            player.Weapons.Equip(sword, false);
+
+            yield return StepFixed(2);
+
+            Assert.AreEqual(clip, enemy.HurtSound, "The enemy must be wired to the impact clip.");
+            AudioSource source = enemy.GetComponent<AudioSource>();
+            Assert.IsNotNull(source, "The enemy must own an AudioSource.");
+            Assert.IsFalse(source.playOnAwake, "The impact sound must not fire on spawn.");
+            Assert.AreEqual(0, enemy.HurtSoundPlays);
+
+            // a weapon hit plays it once
+            _input.AttackMainDown = true;
+            yield return new WaitForFixedUpdate();
+            _input.AttackMainDown = false;
+            Assert.AreEqual(1, enemy.HurtSoundPlays, "Being hit by a weapon must play the impact sound once.");
+
+            // the killing blow still plays, and a dead monster then goes quiet
+            enemy.TakeDamage(new DamageInfo(1000f, Vector2.zero, Vector2.zero, player.Root));
+            Assert.IsFalse(enemy.IsAlive);
+            Assert.AreEqual(2, enemy.HurtSoundPlays, "The killing blow must play the impact sound too.");
+
+            enemy.TakeDamage(new DamageInfo(10f, Vector2.zero, Vector2.zero, player.Root));
+            Assert.AreEqual(2, enemy.HurtSoundPlays, "A dead monster must not keep playing the hit sound.");
+        }
+
+        [UnityTest]
+        public IEnumerator Enemy_StaysSilentWithoutAClip()
+        {
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            EnemyController2D enemy = MakeEnemy(new Vector2(1.6f, 2f), 100f);
+            yield return StepFixed(2);
+
+            Assert.IsNull(enemy.HurtSound, "No clip was assigned in this test.");
+            enemy.TakeDamage(new DamageInfo(10f, Vector2.zero, Vector2.zero, player.Root));
+            Assert.AreEqual(0, enemy.HurtSoundPlays, "A missing clip must be handled quietly, not thrown.");
+        }
+
         // ================================================================ inventory
         [UnityTest]
         public IEnumerator Inventory_BKeyTogglesThePanel()
