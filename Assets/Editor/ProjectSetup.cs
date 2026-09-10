@@ -11,7 +11,13 @@ namespace TanLuZhe.EditorTools
     {
         public const string PhysicsDir = "Assets/Settings/Physics/";
         public const string AudioDir = "Assets/Audio/";
-        public const string HitImpactSoundPath = AudioDir + "660770__madpancake__hit-impact.ogg";
+
+        public const string HitImpactFileName = "660770__madpancake__hit-impact.ogg";
+        public const string CoinFileName = "336936__the-sacha-rush__coin9.wav";
+        public const string PullFileName =
+            "810141__designerschoice__paprhndl-blue-snowball-microphone-cu_tissue-pull-out_nicholas-judy_tdc.wav";
+
+        public static readonly string[] AudioFileNames = { HitImpactFileName, CoinFileName, PullFileName };
 
         [MenuItem("TanLuZhe/0. Setup Project (layers + physics)", false, 0)]
         public static void Run()
@@ -24,33 +30,51 @@ namespace TanLuZhe.EditorTools
             Debug.Log("[TanLuZhe] Project setup complete: layers, physics materials, 2D physics settings, audio import.");
         }
 
-        /// <summary>The impact clip every monster plays when it takes damage.</summary>
-        public static AudioClip HitImpactSound => AssetDatabase.LoadAssetAtPath<AudioClip>(HitImpactSoundPath);
+        /// <summary>Impact clip played by every monster (and by the player) when it takes damage.</summary>
+        public static AudioClip HitImpactSound => LoadAudio(HitImpactFileName);
+
+        /// <summary>Pickup jingle played when the player collects a coin.</summary>
+        public static AudioClip CoinSound => LoadAudio(CoinFileName);
+
+        /// <summary>The yank played when the grapple hook bites and starts pulling the player in.</summary>
+        public static AudioClip PullSound => LoadAudio(PullFileName);
+
+        public static AudioClip LoadAudio(string fileName)
+        {
+            AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AudioDir + fileName);
+            if (clip == null)
+                Debug.LogWarning($"[TanLuZhe] Audio clip not found: {AudioDir + fileName}");
+            return clip;
+        }
 
         /// <summary>
-        /// Imports the impact sound as a short, fully preloaded clip so the first hit has no hitch.
+        /// Imports the game's short sound effects fully preloaded so the first trigger never hitches.
         /// </summary>
         public static void ConfigureAudioImport()
         {
-            AudioImporter importer = AssetImporter.GetAtPath(HitImpactSoundPath) as AudioImporter;
-            if (importer == null)
+            for (int i = 0; i < AudioFileNames.Length; i++)
             {
-                Debug.LogWarning($"[TanLuZhe] Impact sound not found at {HitImpactSoundPath}. " +
-                                 "Drop the .ogg into Assets/Audio/ and re-run setup.");
-                return;
+                string path = AudioDir + AudioFileNames[i];
+                AudioImporter importer = AssetImporter.GetAtPath(path) as AudioImporter;
+                if (importer == null)
+                {
+                    Debug.LogWarning($"[TanLuZhe] Sound effect not found at {path}. " +
+                                     "Drop the file into Assets/Audio/ and re-run setup.");
+                    continue;
+                }
+
+                AudioImporterSampleSettings settings = importer.defaultSampleSettings;
+                settings.loadType = AudioClipLoadType.DecompressOnLoad;
+                settings.compressionFormat = AudioCompressionFormat.Vorbis;
+                settings.quality = 0.7f;
+                settings.preloadAudioData = true;
+                settings.sampleRateSetting = AudioSampleRateSetting.PreserveSampleRate;
+
+                importer.defaultSampleSettings = settings;
+                importer.forceToMono = false;
+                importer.loadInBackground = false;
+                importer.SaveAndReimport();
             }
-
-            AudioImporterSampleSettings settings = importer.defaultSampleSettings;
-            settings.loadType = AudioClipLoadType.DecompressOnLoad;
-            settings.compressionFormat = AudioCompressionFormat.Vorbis;
-            settings.quality = 0.7f;
-            settings.preloadAudioData = true;
-            settings.sampleRateSetting = AudioSampleRateSetting.PreserveSampleRate;
-
-            importer.defaultSampleSettings = settings;
-            importer.forceToMono = false;
-            importer.loadInBackground = false;
-            importer.SaveAndReimport();
         }
 
         public static void EnsureLayers()

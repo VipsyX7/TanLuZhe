@@ -95,6 +95,7 @@ namespace TanLuZhe.EditorTools
                 Check(GetFloat(grapple, "_maxRange") > 4f, "Hook range is usable");
                 Check(GetFloat(grapple, "_pullAcceleration") > 5f, "Hook pull acceleration is usable");
                 Check(GetFloat(grapple, "_releaseDistance") > 0f, "Hook auto-release distance configured");
+                Check(GetRef(grapple, "_pullSound") != null, "Hook has the pull sound assigned");
 
                 GrappleRopeRenderer rope = grapple.GetComponent<GrappleRopeRenderer>();
                 Check(rope != null, "Hook has a rope renderer");
@@ -149,6 +150,21 @@ namespace TanLuZhe.EditorTools
             }
             Check(allEnemies.Length > 0 && enemiesWithSound == allEnemies.Length,
                 $"Every enemy plays the hit impact sound ({enemiesWithSound}/{allEnemies.Length})");
+
+            Check(Object.FindFirstObjectByType<SfxPlayer>() != null, "Shared SfxPlayer exists for one-shot sounds");
+
+            int coinsWithSound = 0;
+            Collectible2D[] allCoins = Object.FindObjectsByType<Collectible2D>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < allCoins.Length; i++)
+            {
+                if (GetRef(allCoins[i], "_pickupSound") != null) coinsWithSound++;
+            }
+            Check(allCoins.Length > 0 && coinsWithSound == allCoins.Length,
+                $"Every coin plays the pickup sound ({coinsWithSound}/{allCoins.Length})");
+
+            PlayerHealth playerHealth = Object.FindFirstObjectByType<PlayerHealth>();
+            Check(playerHealth != null && GetRef(playerHealth, "_hurtSound") != null,
+                "The player plays the same hit impact sound as the monsters");
 
             Check(Count<Collectible2D>() >= 15, $"Coins present ({Count<Collectible2D>()})");
             Check(Count<Checkpoint2D>() >= 3, $"Checkpoints present ({Count<Checkpoint2D>()})");

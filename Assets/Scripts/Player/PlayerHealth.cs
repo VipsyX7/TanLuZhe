@@ -24,6 +24,16 @@ namespace TanLuZhe
         [SerializeField] private Color _flashColor = new Color(1f, 0.35f, 0.35f, 1f);
         [SerializeField] private float _flashInterval = 0.09f;
 
+        [Header("Audio")]
+        [Tooltip("Played whenever the player is hurt. The demo uses the same impact clip as the monsters.")]
+        [SerializeField] private AudioClip _hurtSound;
+        [Range(0f, 1f)] [SerializeField] private float _hurtVolume = 0.85f;
+        [Tooltip("Random pitch spread so repeated hits do not sound identical.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _hurtPitchJitter = 0.1f;
+        [Tooltip("Minimum seconds between two hurt sounds. Damaging the player and instant death " +
+                 "happen in the same frame, and this keeps that from firing the clip twice.")]
+        [Range(0f, 1f)] [SerializeField] private float _hurtSoundDebounce = 0.1f;
+
         private PlayerController2D _controller;
         private Rigidbody2D _rb;
         private float _health;
@@ -32,6 +42,7 @@ namespace TanLuZhe
         private bool _flashOn;
         private float _deathTimer;
         private bool _dead;
+        private float _lastHurtSoundTime = -99f;
         private Color _baseColor = Color.white;
 
         public float Health => _health;
@@ -40,6 +51,10 @@ namespace TanLuZhe
         public bool IsInvulnerable => _invulnerableTimer > 0f;
         public Vector2 RespawnPoint { get; set; }
         public int DeathCount { get; private set; }
+        public AudioClip HurtSound => _hurtSound;
+
+        /// <summary>How many times the hurt sound has fired. Handy for debugging and tests.</summary>
+        public int HurtSoundPlays { get; private set; }
 
         public event Action<float, float> HealthChanged;
         public event Action<DamageInfo> Damaged;
@@ -114,8 +129,23 @@ namespace TanLuZhe
             if (_controller != null) _controller.ApplyHitStun(_hitStun);
             CameraRig2D.Shake(0.45f, 0.22f);
             FxManager.Sparks(transform.position, 8, 5f, new Color(1f, 0.45f, 0.45f));
+            PlayHurtSound();
 
             if (_health <= 0f) Kill();
+        }
+
+        /// <summary>
+        /// Fires the hurt sound. The short debounce means a hit that also kills the player - or a
+        /// hazard that keeps re-triggering on the same frame - only plays it once.
+        /// </summary>
+        private void PlayHurtSound()
+        {
+            if (_hurtSound == null || _hurtVolume <= 0f) return;
+            if (Time.time - _lastHurtSoundTime < _hurtSoundDebounce) return;
+
+            _lastHurtSoundTime = Time.time;
+            SfxPlayer.PlayAt(_hurtSound, transform.position, _hurtVolume, _hurtPitchJitter);
+            HurtSoundPlays++;
         }
 
         public void Heal(float amount)
@@ -138,6 +168,7 @@ namespace TanLuZhe
             HealthChanged?.Invoke(_health, _maxHealth);
             FxManager.Sparks(transform.position, 22, 8f, new Color(1f, 0.6f, 0.4f));
             CameraRig2D.Shake(0.8f, 0.35f);
+            PlayHurtSound();
 
             if (_visual != null)
             {

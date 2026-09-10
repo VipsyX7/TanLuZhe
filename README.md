@@ -188,6 +188,23 @@ private void FixedUpdate()
 
 换音效：把 ogg 丢进 `Assets/Audio/`，改 `ProjectSetup.HitImpactSoundPath`；或者直接在场景里选中敌人，把 `Enemy Controller 2D` 的 **Hurt Sound** 槽换掉（不需要改代码、也不需要重建场景）。
 
+### 音效一览
+
+| 音效 | 文件 | 触发点 |
+|---|---|---|
+| 怪物/玩家受击 | `660770__madpancake__hit-impact.ogg` | `EnemyController2D.TakeDamage()`、`PlayerHealth.TakeDamage()` / `Kill()` |
+| 金币拾取 | `336936__the-sacha-rush__coin9.wav` | `Collectible2D.OnTriggerEnter2D()` |
+| 钩锁拉扯 | `810141__...tissue-pull-out...wav` | `GrappleHook2D.AttachTo()`：钩子咬住的瞬间响一次 |
+
+三个文件都在 `Assets/Audio/`，导入设置由 `ProjectSetup.ConfigureAudioImport()` 统一设为 `DecompressOnLoad + Vorbis + 预加载`。
+
+音效播放分两条路：
+
+* **持久对象（怪物）** 自带 `AudioSource`，直接 `PlayOneShot`，天然带方位感；
+* **会被销毁的对象（金币）** 走共享的 `SfxPlayer`（12 路复用的声部池）—— 因为 `Destroy(gameObject)` 会把挂在它身上的音源一起干掉，声音会被掐断。`SfxPlayer` 会在需要时自动创建，也可以像演示场景那样预先摆在 `Services` 下。
+
+所有音效都带**随机音高抖动**（金币 ±12%、受击 ±10%、钩锁 ±8%），连续触发不会听成一个死板的长音。玩家受击音还有一个 0.1 秒的去抖：一次致命伤害会同时走 `TakeDamage` 和 `Kill`，去抖保证只响一次。
+
 ### 武器数据（`Assets/Settings/Weapons/*.asset`）
 
 | 武器 | 类型 | 伤害 | 冷却 | 特点 |

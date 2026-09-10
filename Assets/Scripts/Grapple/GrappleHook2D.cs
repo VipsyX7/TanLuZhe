@@ -75,6 +75,13 @@ namespace TanLuZhe
         [Tooltip("Knockback applied to the enemy at the moment of the hook impact.")]
         [Range(0f, 30f)] [SerializeField] private float _enemyHitKnockback = 4f;
 
+        [Header("Audio")]
+        [Tooltip("Played the moment the hook bites and starts pulling the player in.")]
+        [SerializeField] private AudioClip _pullSound;
+        [Range(0f, 1f)] [SerializeField] private float _pullVolume = 0.9f;
+        [Tooltip("Random pitch spread so repeated hooks do not sound identical.")]
+        [Range(0f, 0.5f)] [SerializeField] private float _pullPitchJitter = 0.08f;
+
         [Header("Debug")]
         [SerializeField] private bool _drawDebug;
 
@@ -128,6 +135,10 @@ namespace TanLuZhe
         public float ReleaseDistance => _releaseDistance;
 
         public float MaxRange => _maxRange;
+        public AudioClip PullSound => _pullSound;
+
+        /// <summary>How many times the pull sound has fired. Handy for debugging and tests.</summary>
+        public int PullSoundPlays { get; private set; }
         public IGrappleTarget AnchorTarget => _anchorTarget;
 
         /// <summary>World position the rope is currently latched to.</summary>
@@ -403,7 +414,17 @@ namespace TanLuZhe
             }
 
             if (_player != null) _player.SetBeingPulled(true);
+            PlayPullSound();
             FxManager.Sparks(CurrentAnchorWorld, 10, 5f, new Color(0.7f, 0.98f, 1f));
+        }
+
+        /// <summary>Fires the "hook bit and the winch started" sound.</summary>
+        private void PlayPullSound()
+        {
+            if (_pullSound == null || _pullVolume <= 0f) return;
+
+            SfxPlayer.PlayAt(_pullSound, CurrentAnchorWorld, _pullVolume, _pullPitchJitter);
+            PullSoundPlays++;
         }
 
         private void StepAttached(float dt)

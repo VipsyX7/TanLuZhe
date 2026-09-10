@@ -154,6 +154,14 @@ public static class ProceduralArtGenerator
         // Sprites are not power of two: never let the importer rescale them.
         importer.npotScale = TextureImporterNPOTScale.None;
 
+        // Full Rectangle meshes: the tiles (ground / platform) are drawn with SpriteRenderer
+        // tiling and 9-slicing, which a tight mesh cannot do correctly. The mesh type only lives
+        // on the settings block, not directly on the importer.
+        TextureImporterSettings textureSettings = new TextureImporterSettings();
+        importer.ReadTextureSettings(textureSettings);
+        textureSettings.spriteMeshType = SpriteMeshType.FullRect;
+        importer.SetTextureSettings(textureSettings);
+
         importer.SaveAndReimport();
     }
 

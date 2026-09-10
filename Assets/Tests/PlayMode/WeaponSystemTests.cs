@@ -93,6 +93,19 @@ namespace TanLuZhe.Tests
             for (int i = 0; i < steps; i++) yield return new WaitForFixedUpdate();
         }
 
+        private GameObject MakeBox(string name, Vector2 center, Vector2 size, int layer)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(_root.transform, false);
+            go.layer = layer;
+            go.transform.position = center;
+
+            BoxCollider2D collider = go.AddComponent<BoxCollider2D>();
+            collider.size = size;
+            collider.sharedMaterial = Frictionless();
+            return go;
+        }
+
         /// <summary>Writes a private [SerializeField] field before the component's Awake runs.</summary>
         private static void SetField(Object target, string fieldName, object value)
         {
@@ -488,6 +501,88 @@ namespace TanLuZhe.Tests
             Assert.IsNull(enemy.HurtSound, "No clip was assigned in this test.");
             enemy.TakeDamage(new DamageInfo(10f, Vector2.zero, Vector2.zero, player.Root));
             Assert.AreEqual(0, enemy.HurtSoundPlays, "A missing clip must be handled quietly, not thrown.");
+        }
+
+        [UnityTest]
+        public IEnumerator Grapple_PlaysPullSoundWhenItBites()
+        {
+            MakeBox("Wall", new Vector2(6f, 4f), new Vector2(1f, 8f), GameLayers.Ground);
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+
+            AudioClip pull = AudioClip.Create("PullTestClip", 2205, 1, 44100, false);
+            _created.Add(pull);
+            GrappleHook2D grapple = player.Root.AddComponent<GrappleHook2D>();
+            SetField(grapple, "_pullSound", pull);
+            SetField(grapple, "_pullVolume", 0.9f);
+
+            yield return StepFixed(2);
+            Assert.AreEqual(pull, grapple.PullSound, "The hook must be wired to the pull clip.");
+            Assert.AreEqual(0, grapple.PullSoundPlays);
+
+            Assert.IsTrue(grapple.FireAt(new Vector2(6f, 4f)));
+            yield return StepFixed(15);
+
+            Assert.AreEqual(GrappleState.Attached, grapple.State);
+            Assert.AreEqual(1, grapple.PullSoundPlays,
+                "The yank must sound exactly once, at the moment the hook bites and the pull starts.");
+
+            yield return StepFixed(20);
+            Assert.AreEqual(1, grapple.PullSoundPlays, "The pull sound must not retrigger every frame.");
+        }
+
+        [UnityTest]
+        public IEnumerator Collectible_PlaysCoinSoundOnPickup()
+        {
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+
+            AudioClip coin = AudioClip.Create("CoinTestClip", 2205, 1, 44100, false);
+            _created.Add(coin);
+
+            GameObject coinGO = new GameObject("Coin");
+            coinGO.transform.SetParent(_root.transform, false);
+            coinGO.layer = GameLayers.Collectible;
+            coinGO.transform.position = new Vector2(0f, 2f);
+            CircleCollider2D collider = coinGO.AddComponent<CircleCollider2D>();
+            collider.radius = 0.6f;
+            collider.isTrigger = true;
+            Collectible2D collectible = coinGO.AddComponent<Collectible2D>();
+            SetField(collectible, "_pickupSound", coin);
+            SetField(collectible, "_pickupVolume", 0.7f);
+
+            int before = Collectible2D.PickupSoundPlays;
+            yield return StepFixed(5);
+
+            Assert.IsTrue(coinGO == null, "The coin must be consumed.");
+            Assert.AreEqual(before + 1, Collectible2D.PickupSoundPlays,
+                "Collecting a coin must play the coin sound exactly once.");
+        }
+
+        [UnityTest]
+        public IEnumerator Player_PlaysTheSameHitSoundAsMonsters()
+        {
+            Rig player = MakePlayer(new Vector2(0f, 2f));
+            PlayerHealth health = player.Root.AddComponent<PlayerHealth>();
+
+            AudioClip hit = AudioClip.Create("PlayerHitTestClip", 2205, 1, 44100, false);
+            _created.Add(hit);
+            SetField(health, "_hurtSound", hit);
+            SetField(health, "_hurtVolume", 0.85f);
+
+            yield return StepFixed(2);
+            Assert.AreEqual(hit, health.HurtSound, "The player must be wired to the impact clip.");
+            Assert.AreEqual(0, health.HurtSoundPlays);
+
+            health.TakeDamage(new DamageInfo(10f, Vector2.zero, Vector2.zero, player.Root));
+            Assert.AreEqual(1, health.HurtSoundPlays, "Taking damage must play the impact sound.");
+
+            // the invulnerability window still holds
+            health.TakeDamage(new DamageInfo(10f, Vector2.zero, Vector2.zero, player.Root));
+            Assert.AreEqual(1, health.HurtSoundPlays, "Hits during invulnerability must stay silent.");
+
+            // instant death (spikes / pits) is a hurt too
+            yield return StepFixed(70);
+            health.Kill();
+            Assert.AreEqual(2, health.HurtSoundPlays, "Instant death must also play the impact sound.");
         }
 
         // ================================================================ inventory

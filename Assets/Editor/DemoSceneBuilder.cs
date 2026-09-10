@@ -235,7 +235,10 @@ namespace TanLuZhe.EditorTools
             CircleCollider2D collider = go.AddComponent<CircleCollider2D>();
             collider.radius = 0.24f;
             collider.isTrigger = true;
-            go.AddComponent<Collectible2D>();
+            Collectible2D collectible = go.AddComponent<Collectible2D>();
+            SetField(collectible, "_pickupSound", ProjectSetup.CoinSound);
+            SetField(collectible, "_pickupVolume", 0.7f);
+            SetField(collectible, "_pickupPitchJitter", 0.12f);
             return go;
         }
 
@@ -292,6 +295,10 @@ namespace TanLuZhe.EditorTools
             SetField(fx, "_slashSprite", S("slash"));
             SetField(fx, "_slashAngleOffset", 180f);
             SetField(fx, "_poolSize", 220);
+
+            SfxPlayer sfx = services.AddComponent<SfxPlayer>();
+            SetField(sfx, "_voices", 16);
+            SetField(sfx, "_spatialBlend", 0.25f);
 
             // ---- parallax background
             GameObject sky = NewObject("BG Sky", new Vector2(3f, 2f), 0);
@@ -388,6 +395,9 @@ namespace TanLuZhe.EditorTools
             parts.Health = health;
             SetField(health, "_visual", sr);
             SetField(health, "_voidY", -40f);
+            SetField(health, "_hurtSound", ProjectSetup.HitImpactSound);
+            SetField(health, "_hurtVolume", 0.85f);
+            SetField(health, "_hurtPitchJitter", 0.1f);
 
             // ---- grapple
             GameObject grappleGO = new GameObject("Grapple");
@@ -415,6 +425,9 @@ namespace TanLuZhe.EditorTools
             SetField(grapple, "_ropeGrip", 1f);
             SetField(grapple, "_positionCorrection", 9f);
             SetField(grapple, "_attachDamage", 16f);
+            SetField(grapple, "_pullSound", ProjectSetup.PullSound);
+            SetField(grapple, "_pullVolume", 0.9f);
+            SetField(grapple, "_pullPitchJitter", 0.08f);
             SetField(grapple, "_drawDebug", false);
 
             // ---- weapons
